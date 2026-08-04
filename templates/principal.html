@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% set active_page = 'principal' %}
+
+{% block title %}本金管理 - 个人投资管理系统{% endblock %}
+
+{% block content %}
+<!-- 搜索栏 -->
+<div class="search-card">
+    <div class="card-header">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        查询条件
+    </div>
+    <div class="card-body">
+        <div class="search-form">
+            <div class="search-row">
+                <div class="search-field">
+                    <label>券商</label>
+                    <input type="text" name="broker" id="search_broker" placeholder="输入券商名称" value="{{ broker }}">
+                </div>
+                <div class="search-field">
+                    <label>日期从</label>
+                    <input type="date" name="date_from" id="search_date_from" value="{{ date_from }}">
+                </div>
+                <div class="search-field">
+                    <label>日期到</label>
+                    <input type="date" name="date_to" id="search_date_to" value="{{ date_to }}">
+                </div>
+                <div class="search-field">
+                    <label>类型</label>
+                    <select name="operation_type" id="search_operation_type">
+                        <option value="">全部</option>
+                        {% for t in operation_types %}
+                        <option value="{{ t }}" {% if operation_type == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="search-actions">
+                    <button type="button" class="btn btn-primary" onclick="doSearch()">搜索</button>
+                    <a class="search-clear" href="{{ url_for('principal.query') }}">重置</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 概览卡片 -->
+<div class="summary-cards stat-3 stat-group">
+    <div class="summary-card stat-in">
+        <div class="summary-label">总充值</div>
+        <div class="summary-value">¥{{ "%.2f"|format(total_recharge) }}</div>
+    </div>
+    <div class="summary-card stat-out">
+        <div class="summary-label">总取现</div>
+        <div class="summary-value">¥{{ "%.2f"|format(total_withdraw) }}</div>
+    </div>
+    <div class="summary-card stat-net">
+        <div class="summary-label">净本金</div>
+        <div class="summary-value {% if net_principal < 0 %}red{% endif %}">¥{{ "%.2f"|format(net_principal) }}</div>
+    </div>
+</div>
+
+<!-- 新增记录 -->
+<div class="card" id="addForm">
+    <div class="card-header">新增本金记录</div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('principal.add') }}">
+            <div class="form-grid" style="grid-template-columns: repeat(2, 1fr);">
+                <div class="form-group">
+                    <label>券商</label>
+                    <input type="text" name="broker" class="form-control" required placeholder="请输入券商名称">
+                </div>
+                <div class="form-group">
+                    <label>日期</label>
+                    <input type="date" name="record_date" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>类型</label>
+                    <select name="operation_type" class="form-control" required>
+                        {% for t in operation_types %}
+                        <option value="{{ t }}">{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>金额</label>
+                    <input type="number" name="amount" class="form-control" step="0.01" required placeholder="请输入金额">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">提交记录</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 记录表格 -->
+<div class="card table-card">
+    <div class="card-header">本金记录</div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>券商</th>
+                    <th>日期</th>
+                    <th>类型</th>
+                    <th>金额</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in records %}
+                <tr>
+                    <td>{{ record.broker }}</td>
+                    <td>{{ record.record_date }}</td>
+                    <td>
+                        <span class="badge {% if record.operation_type == '充值' %}badge-success{% else %}badge-warning{% endif %}">
+                            {{ record.operation_type }}
+                        </span>
+                    </td>
+                    <td class="amount-col">¥{{ "%.2f"|format(record.amount) }}</td>
+                    <td class="actions">
+                        <button type="button" class="btn btn-sm btn-edit" data-edit-url="{{ url_for('principal.edit', id=record.id) }}" onclick="openEditModal(this, {{ record.id }}, '{{ record.broker|replace("'", "\\'") }}', '{{ record.record_date }}', '{{ record.operation_type }}', {{ record.amount }})">编辑</button>
+                        <form method="POST" action="{{ url_for('principal.delete') }}" style="display:inline" onsubmit="return confirm('确定删除这条记录吗？')">
+                            <input type="hidden" name="id" value="{{ record.id }}">
+                            <button type="submit" class="btn btn-danger btn-sm">删除</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="empty-state">暂无本金记录</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% with pagination=pagination %}{% include '_pagination.html' %}{% endwith %}
+</div>
+{% endblock %}
+
+{% block edit_modal_form %}
+<form id="editForm" method="POST" action="">
+    <input type="hidden" name="id" id="edit_id">
+    <div class="form-grid" style="grid-template-columns: repeat(2, 1fr);">
+        <div class="form-group">
+            <label>券商</label>
+            <input type="text" name="broker" id="edit_broker" class="form-control" required placeholder="请输入券商名称">
+        </div>
+        <div class="form-group">
+            <label>日期</label>
+            <input type="date" name="record_date" id="edit_record_date" class="form-control" required>
+        </div>
+        <div class="form-group">
+            <label>类型</label>
+            <select name="operation_type" id="edit_operation_type" class="form-control" required>
+                {% for t in operation_types %}
+                <option value="{{ t }}">{{ t }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>金额</label>
+            <input type="number" name="amount" id="edit_amount" class="form-control" step="0.01" required placeholder="请输入金额">
+        </div>
+    </div>
+    <div class="form-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存修改</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function doSearch() {
+    var params = new URLSearchParams();
+    var broker = document.getElementById('search_broker').value.trim();
+    var dateFrom = document.getElementById('search_date_from').value;
+    var dateTo = document.getElementById('search_date_to').value;
+    var opType = document.getElementById('search_operation_type').value;
+    if (broker) params.set('broker', broker);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (opType) params.set('operation_type', opType);
+    var qs = params.toString();
+    window.location.search = qs ? '?' + qs : '';
+}
+
+function openEditModal(btn, id, broker, recordDate, operationType, amount) {
+    var form = document.getElementById('editForm');
+    form.action = btn.getAttribute('data-edit-url') || '{{ url_for("principal.edit", id=0) }}'.replace('0', id);
+    document.getElementById('edit_id').value = id;
+    document.getElementById('edit_broker').value = broker;
+    document.getElementById('edit_record_date').value = recordDate;
+    document.getElementById('edit_operation_type').value = operationType;
+    document.getElementById('edit_amount').value = amount.toFixed(2);
+    openModal();
+}
+</script>
+{% endblock %}

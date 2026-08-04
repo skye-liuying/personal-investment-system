@@ -1,0 +1,42 @@
+{% if pagination and pagination.total > 0 %}
+<div class="pagination-bar">
+    <div class="pagination-info">
+        共 <strong>{{ pagination.total }}</strong> 条记录
+    </div>
+    <div class="pagination-controls">
+        {% if pagination.has_prev %}
+            <a class="page-btn" href="javascript:void(0)" onclick="goPage({{ pagination.page - 1 }})">&laquo; 上一页</a>
+        {% else %}
+            <button class="page-btn" disabled>&laquo; 上一页</button>
+        {% endif %}
+
+        <span class="page-num">第 {{ pagination.page }} / {{ pagination.total_pages }} 页</span>
+
+        {% if pagination.has_next %}
+            <a class="page-btn" href="javascript:void(0)" onclick="goPage({{ pagination.page + 1 }})">下一页 &raquo;</a>
+        {% else %}
+            <button class="page-btn" disabled>下一页 &raquo;</button>
+        {% endif %}
+
+        <select class="page-size-select" onchange="changePageSize(this.value)">
+            {% for s in pagination.page_sizes %}
+            <option value="{{ s }}" {% if s == pagination.per_page %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+        <span class="page-size-label">条/页</span>
+    </div>
+</div>
+<script>
+function goPage(page) {
+    var params = new URLSearchParams(window.location.search);
+    params.set('page', page);
+    window.location.search = params.toString();
+}
+function changePageSize(size) {
+    var params = new URLSearchParams(window.location.search);
+    params.set('per_page', size);
+    params.set('page', '1');
+    window.location.search = params.toString();
+}
+</script>
+{% endif %}

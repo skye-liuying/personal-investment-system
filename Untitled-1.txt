@@ -1,0 +1,31 @@
+e:/personal-investment-system/
+├── app.py                          # 入口：仅注册蓝图+启动（~20行）
+├── config.py                       # 数据库 & Flask 配置
+├── database.py                     # 数据库连接工厂
+├── paginate.py                     # 分页工具函数
+├── blueprints/
+│   ├── principal/                  # 本金管理
+│   │   ├── __init__.py             # 蓝图创建 + 概览统计
+│   │   ├── add.py                  # POST /principal/add     → 新增本金记录
+│   │   ├── query.py                # GET  /principal/        → 查询列表（搜索+分页）
+│   │   └── delete.py               # POST /principal/delete  → 删除本金记录
+│   ├── securities/                 # 证券管理
+│   │   ├── __init__.py             # 概览统计
+│   │   ├── add.py                  # POST /securities/add
+│   │   ├── query.py                # GET  /securities/
+│   │   └── delete.py               # POST /securities/delete
+│   ├── otc_app/                    # 场外APP管理
+│   │   ├── __init__.py
+│   │   ├── add.py
+│   │   ├── query.py
+│   │   └── delete.py
+│   ├── statistics/                 # 统计分析
+│   │   ├── __init__.py
+│   │   ├── query.py                # GET  /statistics/       → 资产占比+按Code汇总
+│   │   └── settle.py               # POST /statistics/settle → 产品结清操作
+│   └── settlement/                 # 结清查询
+│       ├── __init__.py
+│       └── query.py                # GET  /settlement/
+├── templates/  （已更新所有 url_for）
+├── static/
+└── requirements.txt

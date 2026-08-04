@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}投资管家{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="layout">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                        <rect width="28" height="28" rx="6" fill="#014DB2"/>
+                        <path d="M8 20V14M14 20V10M20 20V16" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <span class="logo-text">投资管家</span>
+            </div>
+            <nav class="nav">
+                <a href="{{ url_for('principal.query') }}" class="nav-item {% if active_page == 'principal' %}active{% endif %}">
+                    <span class="nav-icon">{% include 'icons/wallet.svg' %}</span>
+                    <span>本金管理</span>
+                </a>
+                <a href="{{ url_for('securities.query') }}" class="nav-item {% if active_page == 'securities' %}active{% endif %}">
+                    <span class="nav-icon">{% include 'icons/chart.svg' %}</span>
+                    <span>证券管理</span>
+                </a>
+                <a href="{{ url_for('otc_app.query') }}" class="nav-item {% if active_page == 'otc_app' %}active{% endif %}">
+                    <span class="nav-icon">{% include 'icons/mobile.svg' %}</span>
+                    <span>场外APP管理</span>
+                </a>
+                <a href="{{ url_for('statistics.query') }}" class="nav-item {% if active_page == 'statistics' %}active{% endif %}">
+                    <span class="nav-icon">{% include 'icons/pie.svg' %}</span>
+                    <span>统计分析</span>
+                </a>
+                <a href="{{ url_for('settlement.query') }}" class="nav-item {% if active_page == 'settlement' %}active{% endif %}">
+                    <span class="nav-icon">{% include 'icons/check.svg' %}</span>
+                    <span>结清查询</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main">
+            <header class="topbar">
+                <h1 class="page-title">{% block page_title %}投资管家{% endblock %}</h1>
+                <div class="topbar-actions">
+                    {% block top_actions %}{% endblock %}
+                </div>
+            </header>
+
+            <div class="content-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="flash-messages">
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- 编辑弹窗 -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>编辑记录</h3>
+                <button type="button" class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="editModalBody">
+                {% block edit_modal_form %}{% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openModal() {
+            document.getElementById('editModal').style.display = 'flex';
+        }
+        function closeModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+        window.onclick = function(event) {
+            const modal = document.getElementById('editModal');
+            if (event.target === modal) closeModal();
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
