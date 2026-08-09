@@ -114,7 +114,7 @@
                     <td><span class="badge {% if row.status == '持有' %}badge-success{% else %}badge-secondary{% endif %}">{{ row.status }}</span></td>
                     <td class="actions">
                         {% if row.status == '持有' %}
-                        <button class="btn btn-secondary btn-sm" onclick="settleCode('{{ row.code }}', '{{ row.code_id }}', '{{ row.name }}', '{{ row.amount }}', '{{ row.asset_type }}')">结清</button>
+                        <button class="btn btn-secondary btn-sm" onclick="settleCode('{{ row.code }}', '{{ row.code_id }}', '{{ row.name }}', '{{ row.amount }}', '{{ row.asset_type }}', '{{ row.source }}')">结清</button>
                         {% else %}
                         <span style="color: #9CA3AF; font-size: 12px;">已结清</span>
                         {% endif %}
@@ -140,26 +140,39 @@
             <form method="POST" id="settleForm" action="{{ url_for('statistics.settle') }}">
                 <input type="hidden" name="code" id="settle_code">
                 <input type="hidden" name="code_id" id="settle_code_id">
+                <input type="hidden" name="source" id="settle_source">
                 <div class="form-grid" style="grid-template-columns: repeat(2, 1fr);">
                     <div class="form-group">
                         <label>产品名称</label>
-                        <input type="text" id="settle_name" class="form-control" readonly>
+                        <input type="text" name="product_name" id="settle_name" class="form-control" readonly>
                     </div>
                     <div class="form-group">
                         <label>资产类型</label>
-                        <input type="text" id="settle_asset_type" class="form-control" readonly>
+                        <input type="text" name="asset_type" id="settle_asset_type" class="form-control" readonly>
                     </div>
                     <div class="form-group">
                         <label>投入金额</label>
-                        <input type="text" id="settle_invest" class="form-control" readonly>
+                        <input type="text" name="invest_amount" id="settle_invest" class="form-control" readonly>
                     </div>
                     <div class="form-group">
                         <label>结清日期</label>
                         <input type="date" name="settle_date" class="form-control" value="{{ today }}" required>
                     </div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
-                        <label>结清金额</label>
-                        <input type="number" name="settle_amount" class="form-control" step="0.01" required placeholder="请输入最终的结清金额">
+                    <div class="form-group">
+                        <label>单价/净值</label>
+                        <input type="number" name="unit_price" id="settle_unit_price" class="form-control" step="0.0001" oninput="calcSettleAmount()" placeholder="请输入单价或净值">
+                    </div>
+                    <div class="form-group">
+                        <label>数量/份额</label>
+                        <input type="number" name="quantity" id="settle_quantity" class="form-control" step="0.0001" oninput="calcSettleAmount()" placeholder="请输入数量或份额">
+                    </div>
+                    <div class="form-group">
+                        <label>总金额</label>
+                        <input type="number" name="total_amount" id="settle_total_amount" class="form-control" step="0.01" readonly placeholder="自动计算">
+                    </div>
+                    <div class="form-group">
+                        <label>费用</label>
+                        <input type="number" name="fees" id="settle_fees" class="form-control" step="0.01" value="0" placeholder="请输入费用">
                     </div>
                 </div>
                 <div class="form-actions">
@@ -173,13 +186,26 @@
 
 {% block scripts %}
 <script>
-function settleCode(code, codeId, name, amount, assetType) {
+function settleCode(code, codeId, name, amount, assetType, source) {
     document.getElementById('settle_code').value = code;
     document.getElementById('settle_code_id').value = codeId || '';
+    document.getElementById('settle_source').value = source;
     document.getElementById('settle_name').value = name;
     document.getElementById('settle_asset_type').value = assetType;
     document.getElementById('settle_invest').value = '¥' + parseFloat(amount).toFixed(2);
+    document.getElementById('settle_unit_price').value = '';
+    document.getElementById('settle_quantity').value = '';
+    document.getElementById('settle_total_amount').value = '';
+    document.getElementById('settle_fees').value = '0';
     document.getElementById('settleModal').style.display = 'flex';
+}
+
+function calcSettleAmount() {
+    var price = parseFloat(document.getElementById('settle_unit_price').value) || 0;
+    var qty = parseFloat(document.getElementById('settle_quantity').value) || 0;
+    if (price && qty) {
+        document.getElementById('settle_total_amount').value = (price * qty).toFixed(2);
+    }
 }
 
 function closeSettleModal() {

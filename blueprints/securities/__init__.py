@@ -25,11 +25,11 @@ def get_overview(db):
     row = cursor.fetchone()
     interest_profit = float(row['total']) if row else 0
 
-    cursor.execute("SELECT COUNT(*) AS cnt FROM securities WHERE status = '持有'")
+    cursor.execute("SELECT COUNT(DISTINCT stock_code) AS cnt FROM securities WHERE status = '持有'")
     row = cursor.fetchone()
     holding_count = row['cnt'] if row else 0
 
-    cursor.execute("SELECT COUNT(*) AS cnt FROM securities WHERE status = '结清'")
+    cursor.execute("SELECT COUNT(DISTINCT code_id) AS cnt FROM securities WHERE status = '结清' AND code_id IS NOT NULL")
     row = cursor.fetchone()
     settled_count = row['cnt'] if row else 0
 

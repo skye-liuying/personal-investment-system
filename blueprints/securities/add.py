@@ -39,6 +39,23 @@ def add():
 
     db = get_db()
     cursor = db.cursor()
+
+    # 卖出时校验数量不能超过持有数量
+    if operation_type == '卖出' and quantity:
+        code_id_val = code_id or None
+        cursor.execute("""
+            SELECT COALESCE(SUM(CASE WHEN operation_type='买入' THEN quantity ELSE -quantity END), 0) AS hold_qty
+            FROM securities
+            WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'
+        """, (stock_code, code_id_val))
+        row = cursor.fetchone()
+        hold_qty = float(row['hold_qty']) if row and row['hold_qty'] else 0
+        if quantity > hold_qty:
+            cursor.close()
+            db.close()
+            flash(f'卖出数量（{quantity}）不能超过持有数量（{hold_qty}）', 'error')
+            return redirect(url_for('securities.query'))
+
     cursor.execute(
         'INSERT INTO securities (broker, record_date, operation_type, asset_type, stock_code, code_id, stock_name, '
         'unit_price, quantity, total_amount, fees, status) '
@@ -91,6 +108,19 @@ def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, r
     sell_amount = float(sell_row['sell_amount'])
     sell_fees = float(sell_row['sell_fees'])
 
+    # 利息收入
+    cursor.execute("""
+        SELECT COALESCE(SUM(total_amount), 0) AS interest_amount,
+               COALESCE(SUM(fees), 0) AS interest_fees
+        FROM securities
+        WHERE stock_code = %s
+          AND IFNULL(code_id, '') = IFNULL(%s, '')
+          AND operation_type = '利息'
+    """, (stock_code, code_id_param))
+    interest_row = cursor.fetchone()
+    interest_amount = float(interest_row['interest_amount'])
+    interest_fees = float(interest_row['interest_fees'])
+
     if sell_qty >= buy_qty and buy_qty > 0:
         # 标记相同 code_id + stock_code 的所有记录为「结清」
         cursor.execute("""
@@ -99,8 +129,8 @@ def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, r
               AND IFNULL(code_id, '') = IFNULL(%s, '')
         """, (stock_code, code_id_param))
 
-        # 总费用 = 买入费用 + 卖出费用
-        total_fees = buy_fees + sell_fees
+        # 总费用 = 买入费用 + 卖出费用 + 利息费用
+        total_fees = buy_fees + sell_fees + interest_fees
 
         # 持有天数
         from datetime import datetime
@@ -109,16 +139,17 @@ def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, r
             holding_days = (datetime.strptime(str(record_date), '%Y-%m-%d') -
                             datetime.strptime(str(first_buy_date), '%Y-%m-%d')).days
 
-        # 收益 = 卖出金额 - 买入金额 - 费用总和
-        profit = sell_amount - buy_amount - total_fees
+        # 收益 = (卖出金额 + 利息) - 买入金额 - 费用总和
+        total_settle = sell_amount + interest_amount
+        profit = total_settle - buy_amount - total_fees
 
         cursor.execute(
             'INSERT INTO settlements (settle_date, code, code_id, product_name, asset_type, '
             'invest_amount, settle_amount, profit, fees, holding_days) '
             'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
             (record_date, stock_code, code_id_param, stock_name, asset_type,
-             buy_amount, sell_amount, profit, total_fees, holding_days)
+             buy_amount, total_settle, profit, total_fees, holding_days)
         )
         db.commit()
-        flash('已自动结清，收益：¥{:,.2f}，费用：¥{:,.2f}，持有 {} 天'.format(
-            profit, total_fees, holding_days if holding_days else '?'), 'info')
+        flash('已自动结清，收益：¥{:,.2f}（含利息 ¥{:,.2f}），费用：¥{:,.2f}，持有 {} 天'.format(
+            profit, interest_amount, total_fees, holding_days if holding_days else '?'), 'info')

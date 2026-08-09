@@ -188,6 +188,15 @@ body {
     color: #047857;
 }
 
+.btn-warning {
+    background: #FEF3C7;
+    color: #B45309;
+}
+
+.btn-warning:hover {
+    background: #FDE68A;
+}
+
 .btn-sm {
     padding: 4px 10px;
     font-size: 12px;
@@ -405,6 +414,39 @@ body {
     background: #FEF3C7;
 }
 
+/* 分组分隔行 */
+.group-separator td {
+    background: #F0F4FF;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--primary);
+    border-bottom: 2px solid #D0DBF5;
+}
+
+.group-tag {
+    margin-right: 6px;
+}
+
+.group-code {
+    font-weight: 400;
+    color: var(--text-secondary);
+    margin-left: 8px;
+    font-size: 12px;
+}
+
+/* 弹窗联动金额提示 */
+.amount-hint {
+    display: block;
+    font-size: 13px;
+    color: var(--primary);
+    margin-top: 2px;
+}
+
+.amount-hint span {
+    font-weight: 600;
+}
+
 .actions {
     display: flex;
     gap: 8px;
@@ -539,10 +581,16 @@ body {
     padding: 20px;
 }
 
-/* 弹窗表单 - 两列布局 */
+/* 弹窗表单 - 两列/三列布局 */
 .modal-form-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.modal-form-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
 }
 
@@ -580,8 +628,15 @@ body {
     margin-top: 20px;
 }
 
+@media (max-width: 768px) {
+    .modal-form-grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 500px) {
-    .modal-form-grid {
+    .modal-form-grid,
+    .modal-form-grid-3 {
         grid-template-columns: 1fr;
     }
 }
@@ -679,6 +734,14 @@ body {
     flex-wrap: wrap;
     gap: 12px;
     align-items: flex-end;
+}
+
+/* 搜索栏 - 5列网格布局 */
+.search-form .search-row-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    align-items: end;
 }
 
 .search-form .search-field {
@@ -827,6 +890,9 @@ body {
 @media (max-width: 768px) {
     .search-form .search-row {
         flex-direction: column;
+    }
+    .search-form .search-row-grid {
+        grid-template-columns: repeat(3, 1fr);
     }
     .search-form .search-field {
         min-width: 100%;

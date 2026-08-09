@@ -12,7 +12,7 @@
     </div>
     <div class="card-body">
         <div class="search-form">
-            <div class="search-row">
+            <div class="search-row-grid">
                 <div class="search-field">
                     <label>APP名称</label>
                     <input type="text" name="app_name" id="search_app_name" placeholder="APP名称" value="{{ request.args.get('app_name', '') }}">
@@ -50,10 +50,11 @@
                 </div>
                 <div class="search-field">
                     <label>状态</label>
+                    {% set display_status = request.args.get('status', '持有') %}
                     <select name="status" id="search_status">
-                        <option value="">全部</option>
-                        <option value="持有" {% if request.args.get('status') == '持有' %}selected{% endif %}>持有</option>
-                        <option value="结清" {% if request.args.get('status') == '结清' %}selected{% endif %}>结清</option>
+                        <option value="" {% if display_status == '' %}selected{% endif %}>全部</option>
+                        <option value="持有" {% if display_status == '持有' %}selected{% endif %}>持有</option>
+                        <option value="结清" {% if display_status == '结清' %}selected{% endif %}>结清</option>
                     </select>
                 </div>
                 <div class="search-field">
@@ -97,7 +98,7 @@
 <div class="card" id="addForm">
     <div class="card-header">新增场外APP记录</div>
     <div class="card-body">
-        <form method="POST" action="{{ url_for('otc_app.add') }}">
+        <form method="POST" id="addForm" action="{{ url_for('otc_app.add') }}">
             <div class="form-grid">
                 <div class="form-group">
                     <label>APP名称</label>
@@ -126,7 +127,7 @@
                 </div>
                 <div class="form-group">
                     <label>产品代码</label>
-                    <input type="text" name="product_code" class="form-control" required>
+                    <input type="text" name="product_code" class="form-control">
                 </div>
                 <div class="form-group">
                     <label>关联编号</label>
@@ -138,26 +139,19 @@
                 </div>
                 <div class="form-group">
                     <label>单价/净值</label>
-                    <input type="number" name="unit_price" class="form-control" step="0.0001">
+                    <input type="number" name="unit_price" class="form-control" step="0.0001" oninput="calcOtcAmount()">
                 </div>
                 <div class="form-group">
                     <label>数量/份额</label>
-                    <input type="number" name="quantity" class="form-control" step="0.0001">
+                    <input type="number" name="quantity" class="form-control" step="0.0001" oninput="calcOtcAmount()">
                 </div>
                 <div class="form-group">
                     <label>总金额</label>
-                    <input type="number" name="total_amount" class="form-control" step="0.01" required>
+                    <input type="number" name="total_amount" id="total_amount" class="form-control" step="0.01" required>
                 </div>
                 <div class="form-group">
                     <label>费用</label>
                     <input type="number" name="fees" class="form-control" step="0.01">
-                </div>
-                <div class="form-group">
-                    <label>状态</label>
-                    <select name="status" class="form-control">
-                        <option value="持有">持有</option>
-                        <option value="结清">结清</option>
-                    </select>
                 </div>
             </div>
             <div class="form-actions">
@@ -205,10 +199,8 @@
                     <td>¥{{ "%.2f"|format(record.fees) if record.fees else '0.00' }}</td>
                     <td><span class="badge {% if record.status == '持有' %}badge-success{% else %}badge-secondary{% endif %}">{{ record.status }}</span></td>
                     <td class="actions">
-                        <form method="POST" action="{{ url_for('otc_app.delete') }}" style="display:inline" onsubmit="return confirm('确定删除这条记录吗？')">
-                            <input type="hidden" name="id" value="{{ record.id }}">
-                            <button type="submit" class="btn btn-danger btn-sm">删除</button>
-                        </form>
+                        <button class="btn btn-success btn-sm" onclick="quickTrade(this, '买入')">买入</button>
+                        <button class="btn btn-warning btn-sm" onclick="quickTrade(this, '卖出')">卖出</button>
                     </td>
                 </tr>
                 {% else %}
@@ -219,19 +211,90 @@
     </div>
     {% with pagination=pagination %}{% include '_pagination.html' %}{% endwith %}
 </div>
+
+<!-- 快速交易弹窗 -->
+<div id="quickTradeModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="quickTradeTitle">快速交易</h3>
+            <button class="modal-close" onclick="closeQuickTrade()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" id="quickTradeForm" action="{{ url_for('otc_app.add') }}">
+                <input type="hidden" name="operation_type" id="qt_operation_type">
+                <div class="modal-form-grid-3">
+                    <div class="form-group">
+                        <label>APP名称</label>
+                        <input type="text" name="app_name" id="qt_broker" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>日期</label>
+                        <input type="date" name="record_date" id="qt_date" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>资产类型</label>
+                        <input type="text" name="asset_type" id="qt_asset_type" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>产品代码</label>
+                        <input type="text" name="product_code" id="qt_code" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>关联编号</label>
+                        <input type="text" name="code_id" id="qt_code_id" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>产品名称</label>
+                        <input type="text" name="product_name" id="qt_name" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>单价/净值</label>
+                        <input type="number" name="unit_price" id="qt_unit_price" class="form-control" step="0.0001" oninput="calcQtAmount()">
+                    </div>
+                    <div class="form-group">
+                        <label>数量/份额</label>
+                        <input type="number" name="quantity" id="qt_quantity" class="form-control" step="0.0001" oninput="calcQtAmount()">
+                    </div>
+                    <div class="form-group">
+                        <label>总金额</label>
+                        <input type="number" name="total_amount" id="qt_total_amount" class="form-control" step="0.01" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>费用</label>
+                        <input type="number" name="fees" id="qt_fees" class="form-control" step="0.01" value="0">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 function toggleFields(opType) {
-    var priceEl = document.querySelector('[name="unit_price"]');
-    var qtyEl = document.querySelector('[name="quantity"]');
+    var addForm = document.getElementById('addForm');
+    var priceEl = addForm.querySelector('[name="unit_price"]');
+    var qtyEl = addForm.querySelector('[name="quantity"]');
     if (opType === '利息') {
-        if (priceEl) priceEl.parentElement.parentElement.style.display = 'none';
-        if (qtyEl) qtyEl.parentElement.parentElement.style.display = 'none';
+        if (priceEl) priceEl.parentElement.style.display = 'none';
+        if (qtyEl) qtyEl.parentElement.style.display = 'none';
     } else {
-        if (priceEl) priceEl.parentElement.parentElement.style.display = '';
-        if (qtyEl) qtyEl.parentElement.parentElement.style.display = '';
+        if (priceEl) priceEl.parentElement.style.display = '';
+        if (qtyEl) qtyEl.parentElement.style.display = '';
+    }
+}
+
+// 单价 × 数量 = 总金额 自动计算
+function calcOtcAmount() {
+    var addForm = document.getElementById('addForm');
+    var price = parseFloat(addForm.querySelector('[name="unit_price"]').value) || 0;
+    var qty = parseFloat(addForm.querySelector('[name="quantity"]').value) || 0;
+    if (price && qty) {
+        document.getElementById('total_amount').value = (price * qty).toFixed(2);
     }
 }
 
@@ -248,6 +311,38 @@ function doSearch() {
     if (dateTo) params.set('date_to', dateTo);
     var qs = params.toString();
     window.location.search = qs ? '?' + qs : '';
+}
+
+// 快速交易弹窗：从当前行读取数据填充表单
+function quickTrade(btn, opType) {
+    var row = btn.closest('tr');
+    var cells = row.querySelectorAll('td');
+    document.getElementById('qt_operation_type').value = opType;
+    document.getElementById('qt_broker').value = cells[0].textContent.trim();
+    document.getElementById('qt_asset_type').value = cells[3].textContent.trim();
+    document.getElementById('qt_code').value = cells[4].textContent.trim();
+    document.getElementById('qt_code_id').value = cells[5].textContent.trim() === '-' ? '' : cells[5].textContent.trim();
+    document.getElementById('qt_name').value = cells[6].textContent.trim();
+    document.getElementById('qt_unit_price').value = '';
+    document.getElementById('qt_quantity').value = '';
+    document.getElementById('qt_total_amount').value = '';
+    document.getElementById('qt_fees').value = '0';
+    document.getElementById('qt_date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('quickTradeTitle').textContent = opType + ' - ' + cells[6].textContent.trim();
+    document.getElementById('quickTradeModal').style.display = 'flex';
+}
+
+// 快速交易：单价 × 数量 = 总金额
+function calcQtAmount() {
+    var price = parseFloat(document.getElementById('qt_unit_price').value) || 0;
+    var qty = parseFloat(document.getElementById('qt_quantity').value) || 0;
+    if (price && qty) {
+        document.getElementById('qt_total_amount').value = (price * qty).toFixed(2);
+    }
+}
+
+function closeQuickTrade() {
+    document.getElementById('quickTradeModal').style.display = 'none';
 }
 </script>
 {% endblock %}

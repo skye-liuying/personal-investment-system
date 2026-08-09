@@ -58,6 +58,12 @@ def query():
         params
     )
     records = cursor.fetchall()
+
+    # 查询最新一笔记录的券商，供新增弹窗默认填充
+    cursor.execute('SELECT broker FROM principal ORDER BY id DESC LIMIT 1')
+    last_row = cursor.fetchone()
+    last_broker = last_row['broker'] if last_row else ''
+
     cursor.close()
     db.close()
 
@@ -73,4 +79,5 @@ def query():
                            date_from=date_from,
                            date_to=date_to,
                            operation_type=operation_type,
-                           operation_types=['充值', '取现'])
+                           operation_types=['充值', '取现'],
+                           last_broker=last_broker)

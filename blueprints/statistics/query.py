@@ -92,14 +92,14 @@ def query():
     # 合并子查询
     combined_sql = f"""
         SELECT stock_code AS code, IFNULL(code_id, '') AS code_id, stock_name AS name, asset_type, '持有' AS status,
-               COALESCE(SUM(total_amount), 0) AS amount
+               COALESCE(SUM(total_amount), 0) AS amount, 'securities' AS source
         FROM securities
         WHERE status = '持有' AND operation_type = '买入'
         {f'AND {inner_where}' if inner_where else ''}
         GROUP BY stock_code, stock_name, asset_type, IFNULL(code_id, '')
         UNION ALL
         SELECT product_code AS code, IFNULL(code_id, '') AS code_id, product_name AS name, asset_type, '持有' AS status,
-               COALESCE(SUM(total_amount), 0) AS amount
+               COALESCE(SUM(total_amount), 0) AS amount, 'otc_app' AS source
         FROM otc_app
         WHERE status = '持有' AND operation_type = '买入'
         {f'AND {otc_inner_where}' if otc_inner_where else ''}

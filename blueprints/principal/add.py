@@ -36,4 +36,7 @@ def add():
     db.close()
 
     flash('本金记录添加成功', 'success')
-    return redirect(url_for('principal.query'))
+    # 重定向时带上查询参数，使页面显示刚保存的记录
+    from urllib.parse import urlencode
+    params = {'broker': broker, 'date_from': record_date, 'date_to': record_date}
+    return redirect(url_for('principal.query') + '?' + urlencode(params))

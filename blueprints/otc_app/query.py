@@ -21,7 +21,7 @@ def query():
     product_name = request.args.get('product_name', '').strip()
     operation_type = request.args.get('operation_type', '').strip()
     asset_type = request.args.get('asset_type', '').strip()
-    status = request.args.get('status', '').strip()
+    status = request.args.get('status', '持有').strip()
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
 

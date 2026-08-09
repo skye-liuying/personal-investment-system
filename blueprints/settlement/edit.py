@@ -1,12 +1,13 @@
-"""结清查询 — 手动新增结清记录（POST /settlement/add）"""
+"""结清查询 — 编辑结清记录（POST /settlement/edit）"""
 
 from flask import flash, redirect, request, url_for
 from . import settlement_bp
 from database import get_db
 
 
-@settlement_bp.route('/add', methods=['POST'])
-def add():
+@settlement_bp.route('/edit', methods=['POST'])
+def edit():
+    record_id = request.form.get('id', '').strip()
     code = request.form.get('code', '').strip()
     code_id = request.form.get('code_id', '').strip()
     product_name = request.form.get('product_name', '').strip()
@@ -17,6 +18,10 @@ def add():
     quantity = request.form.get('quantity', '').strip()
     fees = request.form.get('fees', '').strip()
     holding_days = request.form.get('holding_days', '').strip()
+
+    if not record_id:
+        flash('缺少记录ID', 'error')
+        return redirect(url_for('settlement.query'))
 
     if not all([code, product_name, asset_type, settle_date, buy_price, sell_price, quantity]):
         flash('请填写所有必填字段', 'error')
@@ -34,22 +39,21 @@ def add():
     settle_amount = sell_price * quantity
     fees = float(fees) if fees else 0.0
     holding_days = int(holding_days) if holding_days else None
-
-    # 收益 = 卖出金额 - 买入金额 - 费用总和
     profit = settle_amount - invest_amount - fees
 
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'INSERT INTO settlements (settle_date, code, code_id, product_name, asset_type, '
-        'invest_amount, settle_amount, profit, fees, holding_days, quantity) '
-        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-        (settle_date, code, code_id or None, product_name, asset_type,
-         invest_amount, settle_amount, profit, fees, holding_days, quantity)
+        'UPDATE settlements SET code=%s, code_id=%s, product_name=%s, asset_type=%s, '
+        'settle_date=%s, invest_amount=%s, settle_amount=%s, profit=%s, fees=%s, '
+        'holding_days=%s, quantity=%s '
+        'WHERE id=%s',
+        (code, code_id or None, product_name, asset_type, settle_date,
+         invest_amount, settle_amount, profit, fees, holding_days, quantity, record_id)
     )
     db.commit()
     cursor.close()
     db.close()
 
-    flash('结清记录添加成功', 'success')
+    flash('结清记录更新成功', 'success')
     return redirect(url_for('settlement.query'))

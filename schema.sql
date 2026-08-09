@@ -91,3 +91,6 @@ ALTER TABLE settlements ADD COLUMN code_id VARCHAR(20) DEFAULT NULL COMMENT '关
 ALTER TABLE settlements ADD COLUMN fees DECIMAL(15,2) DEFAULT 0 COMMENT '总费用' AFTER profit;
 ALTER TABLE settlements ADD COLUMN holding_days INT DEFAULT NULL COMMENT '持有天数' AFTER fees;
 
+-- settlements 表新增 quantity 字段
+ALTER TABLE settlements ADD COLUMN quantity DECIMAL(15,4) DEFAULT NULL COMMENT '数量' AFTER holding_days;
+

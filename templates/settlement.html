@@ -64,11 +64,11 @@
     </div>
     <div class="summary-card">
         <div class="summary-label">总费用</div>
-        <div class="summary-value red">¥{{ "%.2f"|format(total_fees) }}</div>
+        <div class="summary-value green">¥{{ "%.2f"|format(total_fees) }}</div>
     </div>
     <div class="summary-card">
         <div class="summary-label">总收益</div>
-        <div class="summary-value {% if total_profit > 0 %}green{% elif total_profit < 0 %}red{% endif %}">¥{{ "%.2f"|format(total_profit) }}</div>
+        <div class="summary-value {% if total_profit > 0 %}red{% elif total_profit < 0 %}green{% endif %}">¥{{ "%.2f"|format(total_profit) }}</div>
     </div>
 </div>
 
@@ -82,8 +82,8 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>代码</th>
                     <th>关联编号</th>
+                    <th>代码</th>
                     <th>产品名称</th>
                     <th>资产类型</th>
                     <th>买入金额</th>
@@ -93,31 +93,36 @@
                     <th>收益率</th>
                     <th>持有天数</th>
                     <th>结清日期</th>
+                    <th>操作</th>
                 </tr>
             </thead>
             <tbody>
                 {% for record in records %}
                 <tr>
-                    <td>{{ record.code }}</td>
                     <td>{{ record.code_id or '-' }}</td>
+                    <td>{{ record.code }}</td>
                     <td>{{ record.product_name }}</td>
                     <td>{{ record.asset_type }}</td>
                     <td class="amount-col">¥{{ "%.2f"|format(record.invest_amount) }}</td>
                     <td class="amount-col">¥{{ "%.2f"|format(record.settle_amount) }}</td>
-                    <td class="amount-col" style="color: #EF4444;">¥{{ "%.2f"|format(record.fees) }}</td>
-                    <td class="amount-col" style="color: {% if record.profit > 0 %}#10B981{% elif record.profit < 0 %}#EF4444{% else %}#6B7280{% endif %};">
+                    <td class="amount-col" style="color: #10B981;">¥{{ "%.2f"|format(record.fees) }}</td>
+                    <td class="amount-col" style="color: {% if record.profit > 0 %}#EF4444{% elif record.profit < 0 %}#10B981{% else %}#6B7280{% endif %};">
                         ¥{{ "%.2f"|format(record.profit) }}
                     </td>
-                    <td class="amount-col" style="color: {% if record.profit > 0 %}#10B981{% elif record.profit < 0 %}#EF4444{% else %}#6B7280{% endif %};">
+                    <td class="amount-col" style="color: {% if record.profit > 0 %}#EF4444{% elif record.profit < 0 %}#10B981{% else %}#6B7280{% endif %};">
                         {% if record.invest_amount and record.invest_amount > 0 %}
                         {{ "%.2f"|format(record.profit / record.invest_amount * 100) }}%
                         {% else %}-{% endif %}
                     </td>
                     <td>{{ record.holding_days if record.holding_days is not none else '-' }}天</td>
                     <td>{{ record.settle_date }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-edit" onclick='openEditModal({{ record | tojson | safe }})'>编辑</button>
+                        <button class="btn btn-sm btn-warning" onclick="correctSettle({{ record.id }}, '{{ record.product_name }}')">数据矫正</button>
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="11" class="empty-state">暂无结清记录</td></tr>
+                <tr><td colspan="12" class="empty-state">暂无结清记录</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -162,12 +167,16 @@
                         <input type="date" name="settle_date" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label>买入金额 *</label>
-                        <input type="number" name="invest_amount" class="form-control" step="0.01" required placeholder="投资本金">
+                        <label>买入单价 *</label>
+                        <input type="number" name="buy_price" id="add_buy_price" class="form-control" step="0.0001" required placeholder="买入单价" oninput="calcAddAmount()">
                     </div>
                     <div class="form-group">
-                        <label>卖出金额 *</label>
-                        <input type="number" name="settle_amount" class="form-control" step="0.01" required placeholder="结清金额">
+                        <label>卖出单价 *</label>
+                        <input type="number" name="sell_price" id="add_sell_price" class="form-control" step="0.0001" required placeholder="卖出单价" oninput="calcAddAmount()">
+                    </div>
+                    <div class="form-group">
+                        <label>数量 *</label>
+                        <input type="number" name="quantity" id="add_quantity" class="form-control" step="0.0001" required placeholder="数量" oninput="calcAddAmount()">
                     </div>
                     <div class="form-group">
                         <label>费用</label>
@@ -176,6 +185,10 @@
                     <div class="form-group">
                         <label>持有天数</label>
                         <input type="number" name="holding_days" class="form-control" placeholder="持有天数">
+                    </div>
+                    <div class="form-group">
+                        <label class="amount-hint">买入总额：<span id="add_invest_hint">-</span></label>
+                        <label class="amount-hint">卖出总额：<span id="add_settle_hint">-</span></label>
                     </div>
                 </div>
                 <div class="modal-form-actions">
@@ -186,9 +199,84 @@
         </div>
     </div>
 </div>
+
+<!-- 编辑结清记录弹窗 -->
+<div class="modal" id="editModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>编辑结清记录</h3>
+            <button class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="editForm" method="POST" action="{{ url_for('settlement.edit') }}">
+                <input type="hidden" name="id" id="edit_id">
+                <div class="modal-form-grid">
+                    <div class="form-group">
+                        <label>产品代码 *</label>
+                        <input type="text" name="code" id="edit_code" class="form-control" required placeholder="如 000001">
+                    </div>
+                    <div class="form-group">
+                        <label>关联编号</label>
+                        <input type="text" name="code_id" id="edit_code_id" class="form-control" placeholder="如 A20260701">
+                    </div>
+                    <div class="form-group">
+                        <label>产品名称 *</label>
+                        <input type="text" name="product_name" id="edit_product_name" class="form-control" required placeholder="产品名称">
+                    </div>
+                    <div class="form-group">
+                        <label>资产类型 *</label>
+                        <select name="asset_type" id="edit_asset_type" class="form-control" required>
+                            <option value="">请选择</option>
+                            <option value="股票">股票</option>
+                            <option value="债券">债券</option>
+                            <option value="基金">基金</option>
+                            <option value="定存">定存</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>结清日期 *</label>
+                        <input type="date" name="settle_date" id="edit_settle_date" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>买入单价 *</label>
+                        <input type="number" name="buy_price" id="edit_buy_price" class="form-control" step="0.0001" required placeholder="买入单价" oninput="calcEditAmount()">
+                    </div>
+                    <div class="form-group">
+                        <label>卖出单价 *</label>
+                        <input type="number" name="sell_price" id="edit_sell_price" class="form-control" step="0.0001" required placeholder="卖出单价" oninput="calcEditAmount()">
+                    </div>
+                    <div class="form-group">
+                        <label>数量 *</label>
+                        <input type="number" name="quantity" id="edit_quantity" class="form-control" step="0.0001" required placeholder="数量" oninput="calcEditAmount()">
+                    </div>
+                    <div class="form-group">
+                        <label>费用</label>
+                        <input type="number" name="fees" id="edit_fees" class="form-control" step="0.01" placeholder="买入卖出总费用">
+                    </div>
+                    <div class="form-group">
+                        <label>持有天数</label>
+                        <input type="number" name="holding_days" id="edit_holding_days" class="form-control" placeholder="持有天数">
+                    </div>
+                    <div class="form-group">
+                        <label class="amount-hint">买入总额：<span id="edit_invest_hint">-</span></label>
+                        <label class="amount-hint">卖出总额：<span id="edit_settle_hint">-</span></label>
+                    </div>
+                </div>
+                <div class="modal-form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<!-- 数据矫正表单 -->
+<form method="POST" id="correctForm" action="{{ url_for('settlement.correct') }}" style="display: none;">
+    <input type="hidden" name="id" id="correct_id">
+</form>
 <script>
 function doSearch() {
     var params = new URLSearchParams();
@@ -208,20 +296,75 @@ function doSearch() {
     window.location.search = qs ? '?' + qs : '';
 }
 
+// === 新增弹窗 ===
 function openAddModal() {
+    document.getElementById('addForm').reset();
+    document.getElementById('add_invest_hint').textContent = '-';
+    document.getElementById('add_settle_hint').textContent = '-';
     document.getElementById('addModal').style.display = 'flex';
 }
-
 function closeAddModal() {
     document.getElementById('addModal').style.display = 'none';
+    document.getElementById('addForm').reset();
+}
+
+// 新增弹窗 — 单价×数量联动计算
+function calcAddAmount() {
+    var bp = parseFloat(document.getElementById('add_buy_price').value) || 0;
+    var sp = parseFloat(document.getElementById('add_sell_price').value) || 0;
+    var qty = parseFloat(document.getElementById('add_quantity').value) || 0;
+    document.getElementById('add_invest_hint').textContent = (bp * qty) ? '¥' + (bp * qty).toFixed(2) : '-';
+    document.getElementById('add_settle_hint').textContent = (sp * qty) ? '¥' + (sp * qty).toFixed(2) : '-';
+}
+
+// === 编辑弹窗 ===
+function openEditModal(record) {
+    var qty = record.quantity || 0;
+    var buyPrice = qty > 0 ? (record.invest_amount / qty).toFixed(4) : '';
+    var sellPrice = qty > 0 ? (record.settle_amount / qty).toFixed(4) : '';
+
+    document.getElementById('edit_id').value = record.id;
+    document.getElementById('edit_code').value = record.code;
+    document.getElementById('edit_code_id').value = record.code_id || '';
+    document.getElementById('edit_product_name').value = record.product_name;
+    document.getElementById('edit_asset_type').value = record.asset_type;
+    document.getElementById('edit_settle_date').value = record.settle_date;
+    document.getElementById('edit_buy_price').value = buyPrice;
+    document.getElementById('edit_sell_price').value = sellPrice;
+    document.getElementById('edit_quantity').value = qty || '';
+    document.getElementById('edit_fees').value = record.fees || 0;
+    document.getElementById('edit_holding_days').value = record.holding_days || '';
+    calcEditAmount();
+    document.getElementById('editModal').style.display = 'flex';
+}
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+// 编辑弹窗 — 单价×数量联动计算
+function calcEditAmount() {
+    var bp = parseFloat(document.getElementById('edit_buy_price').value) || 0;
+    var sp = parseFloat(document.getElementById('edit_sell_price').value) || 0;
+    var qty = parseFloat(document.getElementById('edit_quantity').value) || 0;
+    document.getElementById('edit_invest_hint').textContent = (bp * qty) ? '¥' + (bp * qty).toFixed(2) : '-';
+    document.getElementById('edit_settle_hint').textContent = (sp * qty) ? '¥' + (sp * qty).toFixed(2) : '-';
 }
 
 // 点击弹窗外部关闭
 window.onclick = function(event) {
-    var modal = document.getElementById('addModal');
-    if (event.target === modal) {
-        modal.style.display = 'none';
-    }
+    var addModal = document.getElementById('addModal');
+    var editModal = document.getElementById('editModal');
+    if (event.target === addModal) addModal.style.display = 'none';
+    if (event.target === editModal) editModal.style.display = 'none';
 };
+
+// 数据矫正
+function correctSettle(id, name) {
+    if (!confirm('确定要对「' + name + '」进行数据矫正吗？\n\n将根据公式重新计算：\n收益 = (卖出总金额 + 利息) - 买入总金额 - (买入手续费 + 卖出手续费 + 利息手续费)')) {
+        return;
+    }
+    document.getElementById('correct_id').value = id;
+    document.getElementById('correctForm').submit();
+}
 </script>
 {% endblock %}

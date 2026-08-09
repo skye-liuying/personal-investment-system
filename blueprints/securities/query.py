@@ -59,6 +59,18 @@ def query():
 
     where_sql = (' WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
 
+    # 排序：持有模式按股票代码分组，结清模式按关联编号分组，搜索模式按日期
+    if len(where_clauses) == 1 and "status = '持有'" in where_clauses:
+        order_by = 'stock_code, record_date DESC, id DESC'
+    elif len(where_clauses) == 1 and "status = '结清'" in where_clauses:
+        order_by = 'code_id, stock_code, record_date DESC, id DESC'
+    elif status == '持有':
+        order_by = 'stock_code, record_date DESC, id DESC'
+    elif status == '结清':
+        order_by = 'code_id, stock_code, record_date DESC, id DESC'
+    else:
+        order_by = 'record_date DESC, id DESC'
+
     p = paginate()
     cursor.execute(f'SELECT COUNT(*) AS cnt FROM securities{where_sql}', params)
     p['total'] = cursor.fetchone()['cnt']
@@ -68,7 +80,7 @@ def query():
     p['has_next'] = p['page'] < p['total_pages']
 
     cursor.execute(
-        f'SELECT * FROM securities{where_sql} ORDER BY record_date DESC, id DESC '
+        f'SELECT * FROM securities{where_sql} ORDER BY {order_by} '
         f'LIMIT {p["per_page"]} OFFSET {p["offset"]}',
         params
     )
