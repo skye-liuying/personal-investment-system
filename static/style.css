@@ -39,8 +39,11 @@ body {
     display: flex;
     flex-direction: column;
     position: fixed;
-    height: 100vh;
+    top: 0;
+    left: 0;
+    bottom: 0;
     z-index: 100;
+    transition: width 0.25s ease;
 }
 
 .logo {
@@ -98,6 +101,68 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
+}
+
+.sidebar-toggle {
+    position: absolute;
+    top: 16px;
+    right: -12px;
+    width: 24px;
+    height: 24px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-hover);
+    padding: 0;
+    color: var(--text-secondary);
+    transition: transform 0.25s ease, color 0.2s;
+    z-index: 101;
+}
+
+.sidebar-toggle svg {
+    width: 14px;
+    height: 14px;
+}
+
+.sidebar-toggle:hover {
+    color: var(--primary);
+}
+
+/* 收起状态 */
+.sidebar.collapsed {
+    width: 72px;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+    transform: rotate(180deg);
+}
+
+.sidebar.collapsed .logo {
+    padding: 0 22px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .logo-text {
+    display: none;
+}
+
+.sidebar.collapsed .nav {
+    padding: 16px 14px;
+    align-items: center;
+}
+
+.sidebar.collapsed .nav-item {
+    padding: 10px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .nav-item span:not(.nav-icon) {
+    display: none;
 }
 
 /* 主内容区 */
@@ -107,6 +172,11 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    transition: margin-left 0.25s ease;
+}
+
+.sidebar.collapsed + .main {
+    margin-left: 72px;
 }
 
 .topbar {
@@ -345,10 +415,17 @@ body {
     overflow: hidden;
 }
 
+.table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .data-table {
     width: 100%;
+    min-width: auto;
     border-collapse: collapse;
     font-size: 13px;
+    table-layout: auto;
 }
 
 .data-table th {
@@ -356,12 +433,13 @@ body {
     color: var(--text-secondary);
     font-weight: 600;
     text-align: left;
-    padding: 14px 20px;
+    padding: 10px 8px;
     font-size: 12px;
+    white-space: nowrap;
 }
 
 .data-table td {
-    padding: 14px 20px;
+    padding: 10px 8px;
     border-bottom: 1px solid var(--border);
     vertical-align: middle;
 }
@@ -376,6 +454,52 @@ body {
 
 .data-table tr:hover {
     background: #F3F4F6;
+}
+
+/* 表格列宽辅助类 */
+.data-table th.col-narrow,
+.data-table td.col-narrow {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.data-table th.col-date,
+.data-table td.col-date {
+    width: 95px;
+    white-space: nowrap;
+}
+
+.data-table th.col-money,
+.data-table td.col-money,
+.data-table th.col-num,
+.data-table td.col-num {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.data-table th.col-actions,
+.data-table td.col-actions {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.data-table td.ellipsis {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 紧凑操作按钮 */
+.actions {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: nowrap;
+}
+
+.actions .btn-sm {
+    padding: 3px 8px;
+    font-size: 12px;
 }
 
 .status {
@@ -417,7 +541,7 @@ body {
 /* 分组分隔行 */
 .group-separator td {
     background: #F0F4FF;
-    padding: 8px 16px;
+    padding: 8px;
     font-weight: 600;
     font-size: 13px;
     color: var(--primary);
@@ -426,6 +550,18 @@ body {
 
 .group-tag {
     margin-right: 6px;
+}
+
+/* 小屏适配：保持表格在可视区域内 */
+@media (max-width: 1400px) {
+    .data-table {
+        font-size: 12px;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 8px 6px;
+    }
 }
 
 .group-code {

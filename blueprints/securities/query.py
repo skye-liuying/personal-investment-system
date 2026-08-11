@@ -43,9 +43,12 @@ def query():
     if asset_type:
         where_clauses.append('asset_type = %s')
         params.append(asset_type)
-    if status:
+    if status == '结清':
         where_clauses.append('status = %s')
         params.append(status)
+    else:
+        # 默认（含空/持有/其它搜索条件）排除结清记录
+        where_clauses.append("status != '结清'")
     if date_from:
         where_clauses.append('record_date >= %s')
         params.append(date_from)
@@ -53,23 +56,13 @@ def query():
         where_clauses.append('record_date <= %s')
         params.append(date_to)
 
-    # 默认只查持有状态；有搜索条件时查全部
-    if not where_clauses:
-        where_clauses.append("status = '持有'")
-
     where_sql = (' WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
 
-    # 排序：持有模式按股票代码分组，结清模式按关联编号分组，搜索模式按日期
-    if len(where_clauses) == 1 and "status = '持有'" in where_clauses:
-        order_by = 'stock_code, record_date DESC, id DESC'
-    elif len(where_clauses) == 1 and "status = '结清'" in where_clauses:
-        order_by = 'code_id, stock_code, record_date DESC, id DESC'
-    elif status == '持有':
-        order_by = 'stock_code, record_date DESC, id DESC'
-    elif status == '结清':
+    # 排序：持有模式按股票代码分组，结清模式按关联编号分组
+    if status == '结清':
         order_by = 'code_id, stock_code, record_date DESC, id DESC'
     else:
-        order_by = 'record_date DESC, id DESC'
+        order_by = 'stock_code, record_date DESC, id DESC'
 
     p = paginate()
     cursor.execute(f'SELECT COUNT(*) AS cnt FROM securities{where_sql}', params)
@@ -85,10 +78,16 @@ def query():
         params
     )
     records = cursor.fetchall()
-    cursor.close()
-    db.close()
 
-    overview = get_overview(get_db())
+    # 查询最新一笔记录的券商，供新增弹窗默认填充
+    cursor.execute('SELECT broker FROM securities ORDER BY id DESC LIMIT 1')
+    last_row = cursor.fetchone()
+    last_broker = last_row['broker'] if last_row else ''
+
+    cursor.close()
+
+    overview = get_overview(db)
+    db.close()
 
     return render_template('securities.html',
                            records=records,
@@ -105,4 +104,5 @@ def query():
                            asset_type=asset_type,
                            status=status,
                            date_from=date_from,
-                           date_to=date_to)
+                           date_to=date_to,
+                           last_broker=last_broker)

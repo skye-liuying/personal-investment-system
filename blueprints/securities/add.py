@@ -3,6 +3,7 @@
 from flask import flash, redirect, request, url_for
 from . import securities_bp
 from database import get_db
+from blueprints.statistics.sync import sync_statistics_summary
 
 
 @securities_bp.route('/add', methods=['POST'])
@@ -31,7 +32,7 @@ def add():
     quantity = request.form.get('quantity', '').strip()
 
     unit_price = float(unit_price) if unit_price else None
-    quantity = float(quantity) if quantity else None
+    quantity = int(float(quantity)) if quantity else None
     fees = float(fees) if fees else None
 
     # 买入、卖出、利息：默认状态均为"持有"
@@ -49,7 +50,7 @@ def add():
             WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'
         """, (stock_code, code_id_val))
         row = cursor.fetchone()
-        hold_qty = float(row['hold_qty']) if row and row['hold_qty'] else 0
+        hold_qty = int(row['hold_qty']) if row and row['hold_qty'] else 0
         if quantity > hold_qty:
             cursor.close()
             db.close()
@@ -65,6 +66,11 @@ def add():
     )
     db.commit()
 
+    # 同步统计汇总表
+    if code_id:
+        sync_statistics_summary(cursor, db, code_id)
+        db.commit()
+
     # 卖出时自动判断是否结清：相同 code_id + stock_code 的卖出数量 >= 买入数量时，自动结清并写入结算记录
     if operation_type == '卖出':
         auto_settle(cursor, db, stock_code, code_id or None, stock_name, asset_type, record_date)
@@ -73,7 +79,12 @@ def add():
     db.close()
 
     flash('证券记录添加成功', 'success')
-    return redirect(url_for('securities.query'))
+    from urllib.parse import urlencode
+    params = {'broker': broker, 'stock_name': stock_name, 'stock_code': stock_code}
+    if record_date:
+        params['date_from'] = record_date
+        params['date_to'] = record_date
+    return redirect(url_for('securities.query') + '?' + urlencode(params))
 
 
 def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, record_date):
@@ -151,5 +162,9 @@ def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, r
              buy_amount, total_settle, profit, total_fees, holding_days)
         )
         db.commit()
+        # 同步统计汇总表
+        if code_id_param:
+            sync_statistics_summary(cursor, db, code_id_param)
+            db.commit()
         flash('已自动结清，收益：¥{:,.2f}（含利息 ¥{:,.2f}），费用：¥{:,.2f}，持有 {} 天'.format(
             profit, interest_amount, total_fees, holding_days if holding_days else '?'), 'info')

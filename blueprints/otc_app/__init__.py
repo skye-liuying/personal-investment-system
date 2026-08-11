@@ -20,16 +20,16 @@ def get_overview(db):
     cursor.execute("""
         SELECT COALESCE(SUM(total_amount), 0) AS total
         FROM otc_app
-        WHERE operation_type = '利息'
+        WHERE operation_type = '利息' AND status = '持有'
     """)
     row = cursor.fetchone()
     interest_profit = float(row['total']) if row else 0
 
-    cursor.execute("SELECT COUNT(*) AS cnt FROM otc_app WHERE status = '持有'")
+    cursor.execute("SELECT COUNT(DISTINCT code_id) AS cnt FROM otc_app WHERE status = '持有' AND code_id IS NOT NULL")
     row = cursor.fetchone()
     holding_count = row['cnt'] if row else 0
 
-    cursor.execute("SELECT COUNT(*) AS cnt FROM otc_app WHERE status = '结清'")
+    cursor.execute("SELECT COUNT(DISTINCT code_id) AS cnt FROM otc_app WHERE status = '结清' AND code_id IS NOT NULL")
     row = cursor.fetchone()
     settled_count = row['cnt'] if row else 0
 
@@ -42,4 +42,4 @@ def get_overview(db):
     }
 
 
-from . import query, add, delete  # noqa: E402, F401
+from . import query, add, delete, lookup  # noqa: E402, F401

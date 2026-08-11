@@ -65,9 +65,9 @@ def query():
     last_broker = last_row['broker'] if last_row else ''
 
     cursor.close()
-    db.close()
 
-    overview = get_overview(get_db(), where_clauses, params)
+    overview = get_overview(db, where_clauses, params)
+    db.close()
 
     return render_template('principal.html',
                            records=records,

@@ -31,10 +31,10 @@ CREATE TABLE securities (
     code_id VARCHAR(20) DEFAULT NULL COMMENT '关联编号',
     stock_name VARCHAR(100) NOT NULL COMMENT '股票/产品名称',
     unit_price DECIMAL(15, 4) DEFAULT NULL COMMENT '单价',
-    quantity DECIMAL(15, 4) DEFAULT NULL COMMENT '数量',
+    quantity INT DEFAULT NULL COMMENT '数量',
     total_amount DECIMAL(15, 2) NOT NULL COMMENT '总金额',
     fees DECIMAL(15, 2) DEFAULT 0 COMMENT '费用',
-    asset_type ENUM('股票', '债券', '基金', '定存') NOT NULL COMMENT '资产类型',
+    asset_type ENUM('股票', '债券', '基金', '定存', '港美股') NOT NULL COMMENT '资产类型',
     status ENUM('持有', '结清') DEFAULT '持有' COMMENT '持仓状态',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -54,7 +54,7 @@ CREATE TABLE otc_app (
     quantity DECIMAL(15, 4) DEFAULT NULL COMMENT '数量/份额',
     total_amount DECIMAL(15, 2) NOT NULL COMMENT '总金额',
     fees DECIMAL(15, 2) DEFAULT 0 COMMENT '费用',
-    asset_type ENUM('股票', '债券', '基金', '定存') NOT NULL COMMENT '资产类型',
+    asset_type ENUM('股票', '债券', '基金', '定存', '港美股') NOT NULL COMMENT '资产类型',
     status ENUM('持有', '结清') DEFAULT '持有' COMMENT '持仓状态',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -68,7 +68,7 @@ CREATE TABLE settlements (
     code VARCHAR(20) NOT NULL COMMENT '产品代码',
     code_id VARCHAR(20) DEFAULT NULL COMMENT '关联编号',
     product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
-    asset_type ENUM('股票', '债券', '基金', '定存') NOT NULL COMMENT '资产类型',
+    asset_type ENUM('股票', '债券', '基金', '定存', '港美股') NOT NULL COMMENT '资产类型',
     invest_amount DECIMAL(15, 2) NOT NULL COMMENT '投资本金（该 code 买入总金额）',
     settle_amount DECIMAL(15, 2) NOT NULL COMMENT '结清金额',
     profit DECIMAL(15, 2) NOT NULL COMMENT '收益',
@@ -93,4 +93,20 @@ ALTER TABLE settlements ADD COLUMN holding_days INT DEFAULT NULL COMMENT '持有
 
 -- settlements 表新增 quantity 字段
 ALTER TABLE settlements ADD COLUMN quantity DECIMAL(15,4) DEFAULT NULL COMMENT '数量' AFTER holding_days;
+
+-- 5. 统计分析汇总表（以关联编号为唯一键）
+DROP TABLE IF EXISTS statistics_summary;
+CREATE TABLE statistics_summary (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code_id VARCHAR(20) NOT NULL UNIQUE COMMENT '关联编号（唯一键）',
+    code VARCHAR(50) NOT NULL COMMENT '产品代码',
+    name VARCHAR(100) NOT NULL COMMENT '产品名称',
+    asset_type VARCHAR(20) DEFAULT NULL COMMENT '资产类型',
+    holding_amount DECIMAL(15,2) DEFAULT 0 COMMENT '持有金额',
+    status ENUM('持有', '结清') DEFAULT '持有' COMMENT '持仓状态',
+    source VARCHAR(20) DEFAULT NULL COMMENT '数据来源（securities/otc_app）',
+    remark VARCHAR(500) DEFAULT NULL COMMENT '备注',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) COMMENT='统计分析汇总表（关联编号维度）';
 

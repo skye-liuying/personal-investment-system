@@ -2,6 +2,7 @@
 {% set active_page = 'otc_app' %}
 
 {% block title %}场外APP管理 - 个人投资管理系统{% endblock %}
+{% block page_title %}场外APP管理{% endblock %}
 
 {% block content %}
 <!-- 搜索栏 -->
@@ -42,10 +43,10 @@
                     <label>资产类型</label>
                     <select name="asset_type" id="search_asset_type">
                         <option value="">全部</option>
-                        <option value="股票" {% if request.args.get('asset_type') == '股票' %}selected{% endif %}>股票</option>
                         <option value="债券" {% if request.args.get('asset_type') == '债券' %}selected{% endif %}>债券</option>
                         <option value="基金" {% if request.args.get('asset_type') == '基金' %}selected{% endif %}>基金</option>
                         <option value="定存" {% if request.args.get('asset_type') == '定存' %}selected{% endif %}>定存</option>
+                        <option value="港美股" {% if request.args.get('asset_type') == '港美股' %}selected{% endif %}>港美股</option>
                     </select>
                 </div>
                 <div class="search-field">
@@ -66,6 +67,7 @@
                     <input type="date" name="date_to" id="search_date_to" value="{{ request.args.get('date_to', '') }}">
                 </div>
                 <div class="search-actions">
+                    <button type="button" class="btn btn-success" onclick="openAddOtcModal()">+ 新增</button>
                     <button type="button" class="btn btn-primary" onclick="doSearch()">搜索</button>
                     <a class="search-clear" href="{{ url_for('otc_app.query') }}">重置</a>
                 </div>
@@ -91,73 +93,6 @@
     <div class="summary-card" style="--card-color: #6B7280;">
         <div class="summary-label">已结清</div>
         <div class="summary-value">{{ settled_count }} 组</div>
-    </div>
-</div>
-
-<!-- 新增记录 -->
-<div class="card" id="addForm">
-    <div class="card-header">新增场外APP记录</div>
-    <div class="card-body">
-        <form method="POST" id="addForm" action="{{ url_for('otc_app.add') }}">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>APP名称</label>
-                    <input type="text" name="app_name" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>日期</label>
-                    <input type="date" name="record_date" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>操作类型</label>
-                    <select name="operation_type" class="form-control" required onchange="toggleFields(this.value)">
-                        <option value="买入">买入</option>
-                        <option value="卖出">卖出</option>
-                        <option value="利息">利息</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>资产类型</label>
-                    <select name="asset_type" class="form-control" required>
-                        <option value="股票">股票</option>
-                        <option value="债券">债券</option>
-                        <option value="基金">基金</option>
-                        <option value="定存">定存</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>产品代码</label>
-                    <input type="text" name="product_code" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label>关联编号</label>
-                    <input type="text" name="code_id" class="form-control" placeholder="如A20260701">
-                </div>
-                <div class="form-group">
-                    <label>产品名称</label>
-                    <input type="text" name="product_name" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>单价/净值</label>
-                    <input type="number" name="unit_price" class="form-control" step="0.0001" oninput="calcOtcAmount()">
-                </div>
-                <div class="form-group">
-                    <label>数量/份额</label>
-                    <input type="number" name="quantity" class="form-control" step="0.0001" oninput="calcOtcAmount()">
-                </div>
-                <div class="form-group">
-                    <label>总金额</label>
-                    <input type="number" name="total_amount" id="total_amount" class="form-control" step="0.01" required>
-                </div>
-                <div class="form-group">
-                    <label>费用</label>
-                    <input type="number" name="fees" class="form-control" step="0.01">
-                </div>
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary">提交记录</button>
-            </div>
-        </form>
     </div>
 </div>
 
@@ -257,7 +192,7 @@
                     </div>
                     <div class="form-group">
                         <label>总金额</label>
-                        <input type="number" name="total_amount" id="qt_total_amount" class="form-control" step="0.01" readonly>
+                        <input type="number" name="total_amount" id="qt_total_amount" class="form-control" step="0.01">
                     </div>
                     <div class="form-group">
                         <label>费用</label>
@@ -271,33 +206,83 @@
         </div>
     </div>
 </div>
+
+<!-- 新增场外APP记录弹窗 -->
+<div id="addOtcModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 680px;">
+        <div class="modal-header">
+            <h3>新增场外APP记录</h3>
+            <button class="modal-close" onclick="closeAddOtcModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="{{ url_for('otc_app.add') }}">
+                <div class="modal-form-grid-3">
+                    <div class="form-group">
+                        <label>APP名称</label>
+                        <input type="text" name="app_name" id="ad_app_name" class="form-control" required value="{{ last_app_name }}">
+                    </div>
+                    <div class="form-group">
+                        <label>日期</label>
+                        <input type="date" name="record_date" id="ad_record_date" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>操作类型</label>
+                        <select name="operation_type" id="ad_operation_type" class="form-control" required onchange="toggleAddFields()">
+                            <option value="买入">买入</option>
+                            <option value="卖出">卖出</option>
+                            <option value="利息">利息</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>资产类型</label>
+                        <select name="asset_type" id="ad_asset_type" class="form-control" required>
+                            <option value="债券">债券</option>
+                            <option value="基金" selected>基金</option>
+                            <option value="定存">定存</option>
+                            <option value="港美股">港美股</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>产品代码</label>
+                        <input type="text" name="product_code" id="ad_product_code" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>关联编号</label>
+                        <input type="text" name="code_id" id="ad_code_id" class="form-control" placeholder="如A20260701" oninput="lookupCodeId()">
+                    </div>
+                    <div class="form-group">
+                        <label>产品名称</label>
+                        <input type="text" name="product_name" id="ad_product_name" class="form-control" required>
+                    </div>
+                    <div class="form-group" id="ad_price_group">
+                        <label>单价/净值</label>
+                        <input type="number" name="unit_price" id="ad_unit_price" class="form-control" step="0.0001" oninput="calcAddAmount()">
+                    </div>
+                    <div class="form-group" id="ad_qty_group">
+                        <label>数量/份额</label>
+                        <input type="number" name="quantity" id="ad_quantity" class="form-control" step="0.0001" oninput="calcAddAmount()">
+                    </div>
+                    <div class="form-group">
+                        <label>总金额</label>
+                        <input type="number" name="total_amount" id="ad_total_amount" class="form-control" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>费用</label>
+                        <input type="number" name="fees" id="ad_fees" class="form-control" step="0.01" value="0">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-function toggleFields(opType) {
-    var addForm = document.getElementById('addForm');
-    var priceEl = addForm.querySelector('[name="unit_price"]');
-    var qtyEl = addForm.querySelector('[name="quantity"]');
-    if (opType === '利息') {
-        if (priceEl) priceEl.parentElement.style.display = 'none';
-        if (qtyEl) qtyEl.parentElement.style.display = 'none';
-    } else {
-        if (priceEl) priceEl.parentElement.style.display = '';
-        if (qtyEl) qtyEl.parentElement.style.display = '';
-    }
-}
-
-// 单价 × 数量 = 总金额 自动计算
-function calcOtcAmount() {
-    var addForm = document.getElementById('addForm');
-    var price = parseFloat(addForm.querySelector('[name="unit_price"]').value) || 0;
-    var qty = parseFloat(addForm.querySelector('[name="quantity"]').value) || 0;
-    if (price && qty) {
-        document.getElementById('total_amount').value = (price * qty).toFixed(2);
-    }
-}
-
+// ── 搜索 ──────────────────────────────────────
 function doSearch() {
     var params = new URLSearchParams();
     var fields = ['app_name', 'product_code', 'code_id', 'product_name', 'operation_type', 'asset_type', 'status'];
@@ -313,7 +298,76 @@ function doSearch() {
     window.location.search = qs ? '?' + qs : '';
 }
 
-// 快速交易弹窗：从当前行读取数据填充表单
+// ── 新增弹窗 ──────────────────────────────────
+function openAddOtcModal() {
+    // 日期默认今天
+    document.getElementById('ad_record_date').value = new Date().toISOString().split('T')[0];
+    // APP名称使用后端传入的最近一条（已通过 value 属性预设）
+    // 重置其他字段
+    document.getElementById('ad_operation_type').value = '买入';
+    document.getElementById('ad_asset_type').value = '基金';
+    document.getElementById('ad_product_code').value = '';
+    document.getElementById('ad_code_id').value = '';
+    document.getElementById('ad_product_name').value = '';
+    document.getElementById('ad_unit_price').value = '';
+    document.getElementById('ad_quantity').value = '';
+    document.getElementById('ad_total_amount').value = '';
+    document.getElementById('ad_fees').value = '0';
+    toggleAddFields();
+    document.getElementById('addOtcModal').style.display = 'flex';
+}
+
+function closeAddOtcModal() {
+    document.getElementById('addOtcModal').style.display = 'none';
+}
+
+// 操作类型切换：利息隐藏单价和数量字段
+function toggleAddFields() {
+    var isInterest = document.getElementById('ad_operation_type').value === '利息';
+    document.getElementById('ad_price_group').style.display = isInterest ? 'none' : '';
+    document.getElementById('ad_qty_group').style.display = isInterest ? 'none' : '';
+    if (isInterest) {
+        document.getElementById('ad_unit_price').value = '';
+        document.getElementById('ad_quantity').value = '';
+    }
+}
+
+// 关联编号输入时自动查询并回填产品信息
+var _lookupTimer = null;
+function lookupCodeId() {
+    clearTimeout(_lookupTimer);
+    _lookupTimer = setTimeout(function() {
+        var codeId = document.getElementById('ad_code_id').value.trim();
+        if (!codeId) return;
+
+        fetch('/otc_app/lookup/' + encodeURIComponent(codeId))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.found) {
+                    if (data.app_name)
+                        document.getElementById('ad_app_name').value = data.app_name;
+                    if (data.product_code)
+                        document.getElementById('ad_product_code').value = data.product_code;
+                    if (data.product_name)
+                        document.getElementById('ad_product_name').value = data.product_name;
+                    if (data.asset_type)
+                        document.getElementById('ad_asset_type').value = data.asset_type;
+                }
+            })
+            .catch(function() { /* 忽略网络错误 */ });
+    }, 300);
+}
+
+// 单价 × 数量 = 总金额
+function calcAddAmount() {
+    var price = parseFloat(document.getElementById('ad_unit_price').value) || 0;
+    var qty = parseFloat(document.getElementById('ad_quantity').value) || 0;
+    if (price && qty) {
+        document.getElementById('ad_total_amount').value = (price * qty).toFixed(2);
+    }
+}
+
+// ── 快速交易弹窗 ──────────────────────────────
 function quickTrade(btn, opType) {
     var row = btn.closest('tr');
     var cells = row.querySelectorAll('td');
@@ -332,7 +386,6 @@ function quickTrade(btn, opType) {
     document.getElementById('quickTradeModal').style.display = 'flex';
 }
 
-// 快速交易：单价 × 数量 = 总金额
 function calcQtAmount() {
     var price = parseFloat(document.getElementById('qt_unit_price').value) || 0;
     var qty = parseFloat(document.getElementById('qt_quantity').value) || 0;
@@ -344,5 +397,11 @@ function calcQtAmount() {
 function closeQuickTrade() {
     document.getElementById('quickTradeModal').style.display = 'none';
 }
+
+// ── 弹窗点击遮罩关闭 ──────────────────────────
+window.addEventListener('click', function(event) {
+    if (event.target === document.getElementById('addOtcModal')) closeAddOtcModal();
+    if (event.target === document.getElementById('quickTradeModal')) closeQuickTrade();
+});
 </script>
 {% endblock %}

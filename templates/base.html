@@ -10,7 +10,7 @@
 <body>
     <div class="layout">
         <!-- 侧边栏 -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="logo">
                 <div class="logo-icon">
                     <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
@@ -20,6 +20,11 @@
                 </div>
                 <span class="logo-text">投资管家</span>
             </div>
+            <button type="button" class="sidebar-toggle" id="sidebarToggle" title="收起/展开菜单">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
             <nav class="nav">
                 <a href="{{ url_for('principal.query') }}" class="nav-item {% if active_page == 'principal' %}active{% endif %}">
                     <span class="nav-icon">{% include 'icons/wallet.svg' %}</span>
@@ -92,7 +97,23 @@
         window.onclick = function(event) {
             const modal = document.getElementById('editModal');
             if (event.target === modal) closeModal();
-        }
+        };
+
+        // 侧边栏收起/展开
+        (function() {
+            const sidebar = document.getElementById('sidebar');
+            const toggle = document.getElementById('sidebarToggle');
+            const key = 'sidebar-collapsed';
+            if (localStorage.getItem(key) === '1') {
+                sidebar.classList.add('collapsed');
+            }
+            if (toggle) {
+                toggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('collapsed');
+                    localStorage.setItem(key, sidebar.classList.contains('collapsed') ? '1' : '0');
+                });
+            }
+        })();
     </script>
     {% block scripts %}{% endblock %}
 </body>

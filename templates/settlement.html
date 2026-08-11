@@ -2,6 +2,7 @@
 {% set active_page = 'settlement' %}
 
 {% block title %}结清查询 - 个人投资管理系统{% endblock %}
+{% block page_title %}结清查询{% endblock %}
 
 {% block content %}
 <!-- 搜索栏 -->
@@ -33,6 +34,7 @@
                         <option value="债券" {% if request.args.get('asset_type') == '债券' %}selected{% endif %}>债券</option>
                         <option value="基金" {% if request.args.get('asset_type') == '基金' %}selected{% endif %}>基金</option>
                         <option value="定存" {% if request.args.get('asset_type') == '定存' %}selected{% endif %}>定存</option>
+                        <option value="港美股" {% if request.args.get('asset_type') == '港美股' %}selected{% endif %}>港美股</option>
                     </select>
                 </div>
                 <div class="search-field">
@@ -160,6 +162,7 @@
                             <option value="债券">债券</option>
                             <option value="基金">基金</option>
                             <option value="定存">定存</option>
+                            <option value="港美股">港美股</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -231,6 +234,7 @@
                             <option value="债券">债券</option>
                             <option value="基金">基金</option>
                             <option value="定存">定存</option>
+                            <option value="港美股">港美股</option>
                         </select>
                     </div>
                     <div class="form-group">

@@ -2,6 +2,7 @@
 {% set active_page = 'statistics' %}
 
 {% block title %}统计分析 - 个人投资管理系统{% endblock %}
+{% block page_title %}统计分析{% endblock %}
 
 {% block content %}
 <!-- 搜索栏 -->
@@ -33,6 +34,7 @@
                         <option value="债券" {% if request.args.get('asset_type') == '债券' %}selected{% endif %}>债券</option>
                         <option value="基金" {% if request.args.get('asset_type') == '基金' %}selected{% endif %}>基金</option>
                         <option value="定存" {% if request.args.get('asset_type') == '定存' %}selected{% endif %}>定存</option>
+                        <option value="港美股" {% if request.args.get('asset_type') == '港美股' %}selected{% endif %}>港美股</option>
                     </select>
                 </div>
                 <div class="search-field">
@@ -65,6 +67,7 @@
                 {% if row.asset_type == '股票' %}#EF4444
                 {% elif row.asset_type == '债券' %}#3B82F6
                 {% elif row.asset_type == '基金' %}#10B981
+                {% elif row.asset_type == '港美股' %}#EC4899
                 {% else %}#F59E0B{% endif %};
             "></div>
             {% endfor %}
@@ -76,6 +79,7 @@
                     {% if row.asset_type == '股票' %}#EF4444
                     {% elif row.asset_type == '债券' %}#3B82F6
                     {% elif row.asset_type == '基金' %}#10B981
+                    {% elif row.asset_type == '港美股' %}#EC4899
                     {% else %}#F59E0B{% endif %};
                 "></span>
                 <span>{{ row.asset_type }}</span>
@@ -98,7 +102,7 @@
                     <th>关联编号</th>
                     <th>名称</th>
                     <th>资产类型</th>
-                    <th>投入总额</th>
+                    <th>持有金额</th>
                     <th>状态</th>
                     <th>操作</th>
                 </tr>
@@ -114,6 +118,8 @@
                     <td><span class="badge {% if row.status == '持有' %}badge-success{% else %}badge-secondary{% endif %}">{{ row.status }}</span></td>
                     <td class="actions">
                         {% if row.status == '持有' %}
+                        <button class="btn btn-success btn-sm" onclick="openTradeModal('买入', '{{ row.code }}', '{{ row.code_id }}', '{{ row.name }}', '{{ row.asset_type }}', '{{ row.source }}')">买入</button>
+                        <button class="btn btn-warning btn-sm" onclick="openTradeModal('卖出', '{{ row.code }}', '{{ row.code_id }}', '{{ row.name }}', '{{ row.asset_type }}', '{{ row.source }}')">卖出</button>
                         <button class="btn btn-secondary btn-sm" onclick="settleCode('{{ row.code }}', '{{ row.code_id }}', '{{ row.name }}', '{{ row.amount }}', '{{ row.asset_type }}', '{{ row.source }}')">结清</button>
                         {% else %}
                         <span style="color: #9CA3AF; font-size: 12px;">已结清</span>
@@ -127,6 +133,68 @@
         </table>
     </div>
     {% with pagination=pagination %}{% include '_pagination.html' %}{% endwith %}
+</div>
+
+<!-- 买入/卖出弹窗 -->
+<div id="tradeModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="tradeModalTitle">买入</h3>
+            <button class="modal-close" onclick="closeTradeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" id="tradeForm" action="{{ url_for('statistics.trade') }}">
+                <input type="hidden" name="source" id="trade_source">
+                <input type="hidden" name="operation_type" id="trade_operation_type">
+                <div class="form-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="form-group">
+                        <label>券商/APP名称</label>
+                        <input type="text" name="broker" class="form-control" required placeholder="请输入券商或APP名称">
+                    </div>
+                    <div class="form-group">
+                        <label>操作日期</label>
+                        <input type="date" name="record_date" class="form-control" value="{{ today }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>资产类型</label>
+                        <input type="text" name="asset_type" id="trade_asset_type" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>产品代码</label>
+                        <input type="text" name="code" id="trade_code" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>关联编号</label>
+                        <input type="text" name="code_id" id="trade_code_id" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>产品名称</label>
+                        <input type="text" name="name" id="trade_name" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>单价/净值</label>
+                        <input type="number" name="unit_price" id="trade_unit_price" class="form-control" step="0.0001" oninput="calcTradeAmount()" placeholder="请输入单价或净值">
+                    </div>
+                    <div class="form-group">
+                        <label>数量/份额</label>
+                        <input type="number" name="quantity" id="trade_quantity" class="form-control" step="0.0001" oninput="calcTradeAmount()" placeholder="请输入数量或份额">
+                    </div>
+                    <div class="form-group">
+                        <label>总金额</label>
+                        <input type="number" name="total_amount" id="trade_total_amount" class="form-control" step="0.01" required placeholder="请输入总金额">
+                    </div>
+                    <div class="form-group">
+                        <label>费用</label>
+                        <input type="number" name="fees" class="form-control" step="0.01" value="0" placeholder="请输入费用">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeTradeModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- 结清弹窗 -->
@@ -151,7 +219,7 @@
                         <input type="text" name="asset_type" id="settle_asset_type" class="form-control" readonly>
                     </div>
                     <div class="form-group">
-                        <label>投入金额</label>
+                        <label>持有金额</label>
                         <input type="text" name="invest_amount" id="settle_invest" class="form-control" readonly>
                     </div>
                     <div class="form-group">
@@ -186,6 +254,34 @@
 
 {% block scripts %}
 <script>
+// ---- 买入/卖出弹窗 ----
+function openTradeModal(operationType, code, codeId, name, assetType, source) {
+    document.getElementById('tradeModalTitle').textContent = operationType;
+    document.getElementById('trade_operation_type').value = operationType;
+    document.getElementById('trade_source').value = source;
+    document.getElementById('trade_code').value = code;
+    document.getElementById('trade_code_id').value = codeId || '';
+    document.getElementById('trade_name').value = name;
+    document.getElementById('trade_asset_type').value = assetType;
+    document.getElementById('trade_unit_price').value = '';
+    document.getElementById('trade_quantity').value = '';
+    document.getElementById('trade_total_amount').value = '';
+    document.getElementById('tradeModal').style.display = 'flex';
+}
+
+function calcTradeAmount() {
+    var price = parseFloat(document.getElementById('trade_unit_price').value) || 0;
+    var qty = parseFloat(document.getElementById('trade_quantity').value) || 0;
+    if (price && qty) {
+        document.getElementById('trade_total_amount').value = (price * qty).toFixed(2);
+    }
+}
+
+function closeTradeModal() {
+    document.getElementById('tradeModal').style.display = 'none';
+}
+
+// ---- 结清弹窗 ----
 function settleCode(code, codeId, name, amount, assetType, source) {
     document.getElementById('settle_code').value = code;
     document.getElementById('settle_code_id').value = codeId || '';
@@ -212,10 +308,15 @@ function closeSettleModal() {
     document.getElementById('settleModal').style.display = 'none';
 }
 
+// ---- 通用 ----
 window.onclick = function(event) {
-    var modal = document.getElementById('settleModal');
-    if (event.target === modal) {
-        modal.style.display = 'none';
+    var tradeModal = document.getElementById('tradeModal');
+    var settleModal = document.getElementById('settleModal');
+    if (event.target === tradeModal) {
+        tradeModal.style.display = 'none';
+    }
+    if (event.target === settleModal) {
+        settleModal.style.display = 'none';
     }
 }
 

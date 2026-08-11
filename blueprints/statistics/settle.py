@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import flash, redirect, request, url_for
 from . import statistics_bp
 from database import get_db
+from .sync import sync_statistics_summary
 
 
 @statistics_bp.route('/settle', methods=['POST'])
@@ -236,6 +237,12 @@ def settle():
          invest_amount, settle_total, profit, total_fees, holding_days, buy_qty)
     )
     db.commit()
+
+    # 同步统计汇总表
+    if code_id_val:
+        sync_statistics_summary(cursor, db, code_id_val)
+        db.commit()
+
     cursor.close()
     db.close()
 

@@ -3,6 +3,7 @@
 from flask import flash, redirect, request, url_for
 from . import otc_app_bp
 from database import get_db
+from blueprints.statistics.sync import sync_statistics_summary
 
 
 @otc_app_bp.route('/add', methods=['POST'])
@@ -65,6 +66,11 @@ def add():
     )
     db.commit()
 
+    # 同步统计汇总表
+    if code_id:
+        sync_statistics_summary(cursor, db, code_id)
+        db.commit()
+
     # 卖出时自动检查是否可结清
     if operation_type == '卖出' and quantity and code_id:
         _try_settle(cursor, db, code_id, product_code, product_name, asset_type, record_date)
@@ -76,7 +82,8 @@ def add():
     db.close()
 
     flash('场外APP记录添加成功', 'success')
-    return redirect(url_for('otc_app.query'))
+    # 保存后自动查询今日记录
+    return redirect(url_for('otc_app.query', date_from=record_date, date_to=record_date))
 
 
 def _try_settle(cursor, db, code_id, product_code, product_name, asset_type, settle_date):
@@ -141,5 +148,9 @@ def _try_settle(cursor, db, code_id, product_code, product_name, asset_type, set
          invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty)
     )
     db.commit()
+    # 同步统计汇总表
+    if code_id:
+        sync_statistics_summary(cursor, db, code_id)
+        db.commit()
 
     flash(f'卖出份额与买入份额相等，{product_name}（{product_code}）已自动结清，记录已写入结清查询页', 'success')

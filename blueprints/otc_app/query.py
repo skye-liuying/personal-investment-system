@@ -72,10 +72,15 @@ def query():
         params
     )
     records = cursor.fetchall()
-    cursor.close()
-    db.close()
 
-    overview = get_overview(get_db())
+    # 最近一条 APP 名称（供新增弹窗默认值）
+    cursor.execute("SELECT app_name FROM otc_app ORDER BY record_date DESC, id DESC LIMIT 1")
+    row = cursor.fetchone()
+    last_app_name = row['app_name'] if row and row['app_name'] else ''
+    cursor.close()
+
+    overview = get_overview(db)
+    db.close()
 
     return render_template('otc_app.html',
                            records=records,
@@ -92,4 +97,5 @@ def query():
                            asset_type=asset_type,
                            status=status,
                            date_from=date_from,
-                           date_to=date_to)
+                           date_to=date_to,
+                           last_app_name=last_app_name)

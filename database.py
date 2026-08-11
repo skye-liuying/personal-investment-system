@@ -3,6 +3,9 @@
 import pymysql
 from config import Config
 
+# 显式导入 cryptography，确保 PyMySQL 的 caching_sha2_password 认证可用
+import cryptography  # noqa: F401
+
 
 def get_db():
     """获取数据库连接"""

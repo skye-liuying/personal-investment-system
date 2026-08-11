@@ -2,6 +2,7 @@
 {% set active_page = 'securities' %}
 
 {% block title %}证券管理 - 个人投资管理系统{% endblock %}
+{% block page_title %}证券管理{% endblock %}
 
 {% block content %}
 <!-- 搜索栏 -->
@@ -12,7 +13,7 @@
     </div>
     <div class="card-body">
         <div class="search-form">
-            <div class="search-row">
+            <div class="search-row-grid">
                 <div class="search-field">
                     <label>券商</label>
                     <input type="text" name="broker" id="search_broker" placeholder="券商名称" value="{{ request.args.get('broker', '') }}">
@@ -38,8 +39,6 @@
                         <option value="利息" {% if request.args.get('operation_type') == '利息' %}selected{% endif %}>利息</option>
                     </select>
                 </div>
-            </div>
-            <div class="search-row">
                 <div class="search-field">
                     <label>资产类型</label>
                     <select name="asset_type" id="search_asset_type">
@@ -48,6 +47,7 @@
                         <option value="债券" {% if request.args.get('asset_type') == '债券' %}selected{% endif %}>债券</option>
                         <option value="基金" {% if request.args.get('asset_type') == '基金' %}selected{% endif %}>基金</option>
                         <option value="定存" {% if request.args.get('asset_type') == '定存' %}selected{% endif %}>定存</option>
+                        <option value="港美股" {% if request.args.get('asset_type') == '港美股' %}selected{% endif %}>港美股</option>
                     </select>
                 </div>
                 <div class="search-field">
@@ -67,6 +67,7 @@
                     <input type="date" name="date_to" id="search_date_to" value="{{ request.args.get('date_to', '') }}">
                 </div>
                 <div class="search-actions">
+                    <button type="button" class="btn btn-success" onclick="openAddModal()">新增</button>
                     <button type="button" class="btn btn-primary" onclick="doSearch()">搜索</button>
                     <a class="search-clear" href="{{ url_for('securities.query') }}">重置</a>
                 </div>
@@ -95,70 +96,77 @@
     </div>
 </div>
 
-<!-- 新增记录 -->
-<div class="card" id="addForm">
-    <div class="card-header">新增证券记录</div>
-    <div class="card-body">
-        <form method="POST" id="addForm" action="{{ url_for('securities.add') }}">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>券商</label>
-                    <input type="text" name="broker" class="form-control" required>
+<!-- 新增记录弹窗 -->
+<div id="addModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>新增证券记录</h3>
+            <button type="button" class="modal-close" onclick="closeAddModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="{{ url_for('securities.add') }}">
+                <div class="modal-form-grid-3">
+                    <div class="form-group">
+                        <label>券商</label>
+                        <input type="text" name="broker" id="add_broker" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>日期</label>
+                        <input type="date" name="record_date" id="add_date" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>操作类型</label>
+                        <select name="operation_type" id="add_operation_type" class="form-control" required onchange="toggleAddFields(this.value)">
+                            <option value="买入">买入</option>
+                            <option value="卖出">卖出</option>
+                            <option value="利息">利息</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>资产类型</label>
+                        <select name="asset_type" class="form-control" required>
+                            <option value="股票">股票</option>
+                            <option value="债券">债券</option>
+                            <option value="基金">基金</option>
+                            <option value="定存">定存</option>
+                            <option value="港美股">港美股</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>股票代码</label>
+                        <input type="text" name="stock_code" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>关联编号</label>
+                        <input type="text" name="code_id" class="form-control" placeholder="如A20260701">
+                    </div>
+                    <div class="form-group">
+                        <label>股票名称</label>
+                        <input type="text" name="stock_name" class="form-control" required>
+                    </div>
+                    <div class="form-group" id="add_price_group">
+                        <label>单价</label>
+                        <input type="number" name="unit_price" class="form-control" step="0.0001" oninput="calcAddAmount()">
+                    </div>
+                    <div class="form-group" id="add_qty_group">
+                        <label>数量（整数）</label>
+                        <input type="number" name="quantity" class="form-control" step="1" oninput="calcAddAmount()" placeholder="如100">
+                    </div>
+                    <div class="form-group">
+                        <label>总金额</label>
+                        <input type="number" name="total_amount" id="add_total_amount" class="form-control" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>费用</label>
+                        <input type="number" name="fees" class="form-control" step="0.01" value="0">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>日期</label>
-                    <input type="date" name="record_date" class="form-control" required>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
                 </div>
-                <div class="form-group">
-                    <label>操作类型</label>
-                    <select name="operation_type" class="form-control" required onchange="toggleFields(this.value)">
-                        <option value="买入">买入</option>
-                        <option value="卖出">卖出</option>
-                        <option value="利息">利息</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>资产类型</label>
-                    <select name="asset_type" class="form-control" required>
-                        <option value="股票">股票</option>
-                        <option value="债券">债券</option>
-                        <option value="基金">基金</option>
-                        <option value="定存">定存</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>股票代码</label>
-                    <input type="text" name="stock_code" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>关联编号</label>
-                    <input type="text" name="code_id" class="form-control" placeholder="如A20260701">
-                </div>
-                <div class="form-group">
-                    <label>股票名称</label>
-                    <input type="text" name="stock_name" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>单价</label>
-                    <input type="number" name="unit_price" class="form-control" step="0.0001" oninput="calcSecAmount()">
-                </div>
-                <div class="form-group">
-                    <label>数量</label>
-                    <input type="number" name="quantity" class="form-control" step="0.0001" oninput="calcSecAmount()">
-                </div>
-                <div class="form-group">
-                    <label>总金额</label>
-                    <input type="number" name="total_amount" id="total_amount" class="form-control" step="0.01" required>
-                </div>
-                <div class="form-group">
-                    <label>费用</label>
-                    <input type="number" name="fees" class="form-control" step="0.01">
-                </div>
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary">提交记录</button>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -208,7 +216,7 @@
                     <td>{{ record.code_id or '-' }}</td>
                     <td>{{ record.stock_name }}</td>
                     <td>{{ "%.4f"|format(record.unit_price) if record.unit_price else '-' }}</td>
-                    <td>{{ "%.4f"|format(record.quantity) if record.quantity else '-' }}</td>
+                    <td>{{ record.quantity if record.quantity else '-' }}</td>
                     <td class="amount-col">¥{{ "%.2f"|format(record.total_amount) }}</td>
                     <td>¥{{ "%.2f"|format(record.fees) if record.fees else '0.00' }}</td>
                     <td><span class="badge {% if record.status == '持有' %}badge-success{% else %}badge-secondary{% endif %}">{{ record.status }}</span></td>
@@ -266,8 +274,8 @@
                         <input type="number" name="unit_price" id="qt_unit_price" class="form-control" step="0.0001" oninput="calcQtAmount()">
                     </div>
                     <div class="form-group">
-                        <label>数量</label>
-                        <input type="number" name="quantity" id="qt_quantity" class="form-control" step="0.0001" oninput="calcQtAmount()">
+                        <label>数量（整数）</label>
+                        <input type="number" name="quantity" id="qt_quantity" class="form-control" step="1" oninput="calcQtAmount()" placeholder="如100">
                     </div>
                     <div class="form-group">
                         <label>总金额</label>
@@ -289,28 +297,55 @@
 
 {% block scripts %}
 <script>
-function toggleFields(opType) {
-    var addForm = document.getElementById('addForm');
-    var priceEl = addForm.querySelector('[name="unit_price"]');
-    var qtyEl = addForm.querySelector('[name="quantity"]');
+// ---- 新增弹窗 ----
+function openAddModal() {
+    // 券商默认填充最近一笔记录的券商
+    document.getElementById('add_broker').value = {{ last_broker | tojson }};
+    // 清空其他字段
+    document.getElementById('add_date').value = '';
+    document.getElementById('add_operation_type').value = '买入';
+    document.querySelector('#addModal select[name="asset_type"]').value = '股票';
+    document.querySelector('#addModal input[name="stock_code"]').value = '';
+    document.querySelector('#addModal input[name="code_id"]').value = '';
+    document.querySelector('#addModal input[name="stock_name"]').value = '';
+    document.querySelector('#addModal input[name="unit_price"]').value = '';
+    document.querySelector('#addModal input[name="quantity"]').value = '';
+    document.getElementById('add_total_amount').value = '';
+    document.querySelector('#addModal input[name="fees"]').value = '0';
+    // 默认显示单价/数量
+    document.getElementById('add_price_group').style.display = '';
+    document.getElementById('add_qty_group').style.display = '';
+    document.getElementById('addModal').style.display = 'flex';
+}
+
+function closeAddModal() {
+    document.getElementById('addModal').style.display = 'none';
+}
+
+function toggleAddFields(opType) {
+    var priceGroup = document.getElementById('add_price_group');
+    var qtyGroup = document.getElementById('add_qty_group');
     if (opType === '利息') {
-        if (priceEl) priceEl.parentElement.style.display = 'none';
-        if (qtyEl) qtyEl.parentElement.style.display = 'none';
+        priceGroup.style.display = 'none';
+        qtyGroup.style.display = 'none';
     } else {
-        if (priceEl) priceEl.parentElement.style.display = '';
-        if (qtyEl) qtyEl.parentElement.style.display = '';
+        priceGroup.style.display = '';
+        qtyGroup.style.display = '';
     }
 }
 
-// 单价 × 数量 = 总金额 自动计算
-function calcSecAmount() {
-    var addForm = document.getElementById('addForm');
-    var price = parseFloat(addForm.querySelector('[name="unit_price"]').value) || 0;
-    var qty = parseFloat(addForm.querySelector('[name="quantity"]').value) || 0;
+function calcAddAmount() {
+    var price = parseFloat(document.querySelector('#addModal input[name="unit_price"]').value) || 0;
+    var qty = parseFloat(document.querySelector('#addModal input[name="quantity"]').value) || 0;
     if (price && qty) {
-        document.getElementById('total_amount').value = (price * qty).toFixed(2);
+        document.getElementById('add_total_amount').value = (price * qty).toFixed(2);
     }
 }
+
+window.addEventListener('click', function(event) {
+    var modal = document.getElementById('addModal');
+    if (event.target === modal) closeAddModal();
+});
 
 function doSearch() {
     var params = new URLSearchParams();

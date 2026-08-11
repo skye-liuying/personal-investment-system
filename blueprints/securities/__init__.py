@@ -20,12 +20,12 @@ def get_overview(db):
     cursor.execute("""
         SELECT COALESCE(SUM(total_amount), 0) AS total
         FROM securities
-        WHERE operation_type = '利息'
+        WHERE operation_type = '利息' AND status = '持有'
     """)
     row = cursor.fetchone()
     interest_profit = float(row['total']) if row else 0
 
-    cursor.execute("SELECT COUNT(DISTINCT stock_code) AS cnt FROM securities WHERE status = '持有'")
+    cursor.execute("SELECT COUNT(DISTINCT code_id) AS cnt FROM securities WHERE status = '持有' AND code_id IS NOT NULL")
     row = cursor.fetchone()
     holding_count = row['cnt'] if row else 0
 

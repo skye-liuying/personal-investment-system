@@ -4,4 +4,4 @@ from flask import Blueprint
 
 statistics_bp = Blueprint('statistics', __name__)
 
-from . import query, settle  # noqa: E402, F401
+from . import query, settle, trade  # noqa: E402, F401
