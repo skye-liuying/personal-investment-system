@@ -3,6 +3,7 @@
 from flask import flash, redirect, request, url_for
 from . import settlement_bp
 from database import get_db
+from blueprints.auth.helpers import get_current_user_id
 
 
 @settlement_bp.route('/add', methods=['POST'])
@@ -41,10 +42,10 @@ def add():
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'INSERT INTO settlements (settle_date, code, code_id, product_name, asset_type, '
+        'INSERT INTO settlements (user_id, settle_date, code, code_id, product_name, asset_type, '
         'invest_amount, settle_amount, profit, fees, holding_days, quantity) '
-        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-        (settle_date, code, code_id or None, product_name, asset_type,
+        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+        (get_current_user_id(), settle_date, code, code_id or None, product_name, asset_type,
          invest_amount, settle_amount, profit, fees, holding_days, quantity)
     )
     db.commit()

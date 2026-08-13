@@ -3,6 +3,7 @@
 from flask import flash, redirect, request, url_for
 from . import principal_bp
 from database import get_db
+from blueprints.auth.helpers import get_current_user_id
 
 
 @principal_bp.route('/add', methods=['POST'])
@@ -27,9 +28,9 @@ def add():
     db = get_db()
     cursor = db.cursor()
     cursor.execute(
-        'INSERT INTO principal (broker, record_date, operation_type, amount, remark) '
-        'VALUES (%s, %s, %s, %s, %s)',
-        (broker, record_date, operation_type, amount, remark)
+        'INSERT INTO principal (user_id, broker, record_date, operation_type, amount, remark) '
+        'VALUES (%s, %s, %s, %s, %s, %s)',
+        (get_current_user_id(), broker, record_date, operation_type, amount, remark)
     )
     db.commit()
     cursor.close()

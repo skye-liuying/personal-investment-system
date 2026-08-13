@@ -5,6 +5,7 @@ from . import principal_bp
 from . import get_overview
 from database import get_db
 from paginate import paginate
+from blueprints.auth.helpers import scope_condition
 
 
 @principal_bp.route('/')
@@ -15,6 +16,12 @@ def query():
     # 构建查询条件
     where_clauses = []
     params = []
+
+    # 数据隔离：普通用户只看自己的数据，admin 看全部
+    scope_sql, scope_params = scope_condition()
+    if scope_sql:
+        where_clauses.append(scope_sql)
+        params.extend(scope_params)
 
     broker = request.args.get('broker', '').strip()
     date_from = request.args.get('date_from', '').strip()
@@ -60,7 +67,14 @@ def query():
     records = cursor.fetchall()
 
     # 查询最新一笔记录的券商，供新增弹窗默认填充
-    cursor.execute('SELECT broker FROM principal ORDER BY id DESC LIMIT 1')
+    last_broker = ''
+    if scope_sql:
+        cursor.execute(
+            'SELECT broker FROM principal WHERE user_id = %s ORDER BY id DESC LIMIT 1',
+            (scope_params[0],)
+        )
+    else:
+        cursor.execute('SELECT broker FROM principal ORDER BY id DESC LIMIT 1')
     last_row = cursor.fetchone()
     last_broker = last_row['broker'] if last_row else ''
 

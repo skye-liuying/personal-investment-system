@@ -3,6 +3,7 @@
 from flask import flash, redirect, request, url_for
 from . import principal_bp
 from database import get_db
+from blueprints.auth.helpers import get_current_user_id, is_admin
 
 
 @principal_bp.route('/delete', methods=['POST'])
@@ -21,7 +22,13 @@ def delete():
 
     db = get_db()
     cursor = db.cursor()
-    cursor.execute('DELETE FROM principal WHERE id = %s', (record_id,))
+    if is_admin():
+        cursor.execute('DELETE FROM principal WHERE id = %s', (record_id,))
+    else:
+        cursor.execute(
+            'DELETE FROM principal WHERE id = %s AND user_id = %s',
+            (record_id, get_current_user_id())
+        )
     db.commit()
     cursor.close()
     db.close()

@@ -5,6 +5,7 @@ from . import otc_app_bp
 from . import get_overview
 from database import get_db
 from paginate import paginate
+from blueprints.auth.helpers import scope_condition, get_current_user_id
 
 
 @otc_app_bp.route('/')
@@ -14,6 +15,12 @@ def query():
 
     where_clauses = []
     params = []
+
+    # 数据隔离：普通用户只看自己的数据，admin 看全部
+    scope_sql, scope_params = scope_condition()
+    if scope_sql:
+        where_clauses.append(scope_sql)
+        params.extend(scope_params)
 
     app_name = request.args.get('app_name', '').strip()
     product_code = request.args.get('product_code', '').strip()
@@ -74,12 +81,18 @@ def query():
     records = cursor.fetchall()
 
     # 最近一条 APP 名称（供新增弹窗默认值）
-    cursor.execute("SELECT app_name FROM otc_app ORDER BY record_date DESC, id DESC LIMIT 1")
+    if scope_sql:
+        cursor.execute(
+            "SELECT app_name FROM otc_app WHERE user_id = %s ORDER BY record_date DESC, id DESC LIMIT 1",
+            scope_params
+        )
+    else:
+        cursor.execute("SELECT app_name FROM otc_app ORDER BY record_date DESC, id DESC LIMIT 1")
     row = cursor.fetchone()
     last_app_name = row['app_name'] if row and row['app_name'] else ''
     cursor.close()
 
-    overview = get_overview(db)
+    overview = get_overview(db, where_clauses, params)
     db.close()
 
     return render_template('otc_app.html',

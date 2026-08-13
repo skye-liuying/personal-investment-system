@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}角色权限管理 - 投资管家{% endblock %}
+{% block page_title %}角色权限管理{% endblock %}
+
+{% block top_actions %}
+    <button class="btn btn-primary" onclick="openRoleModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        创建角色
+    </button>
+{% endblock %}
+
+{% block content %}
+<div class="table-card">
+    <div class="card-header" style="padding: 16px 20px;">
+        <h3 class="card-title">角色列表</h3>
+        <span style="font-size: 13px; color: #6B7280;">共 {{ roles|length }} 个角色</span>
+    </div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>角色名称</th>
+                    <th>描述</th>
+                    <th>页面权限</th>
+                    <th class="col-actions">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for role in roles %}
+                <tr>
+                    <td>{{ role.id }}</td>
+                    <td>
+                        {{ role.role_name }}
+                        {% if role.role_name == 'admin' %}<span class="badge badge-warning">超级管理员</span>{% endif %}
+                    </td>
+                    <td>{{ role.description or '-' }}</td>
+                    <td style="max-width: 320px;">
+                        {% for page in page_names %}
+                            {% set p = role.perm_matrix[page] %}
+                            <span style="display:inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 12px; font-size: 12px; {% if p.view %}background:#DBEAFE; color:#2563EB;{% else %}background:#F3F4F6; color:#9CA3AF;{% endif %}">{{ page_labels[page] }}</span>
+                        {% endfor %}
+                    </td>
+                    <td class="col-actions">
+                        <div class="actions">
+                            <button class="btn btn-sm btn-edit" onclick='openEditRoleModal({{ role|tojson }})'>配置权限</button>
+                            {% if role.role_name != 'admin' %}
+                            <form method="post" action="{{ url_for('roles.delete') }}" onsubmit="return confirm('确定删除角色「{{ role.role_name }}」吗？');" style="display:inline;">
+                                <input type="hidden" name="id" value="{{ role.id }}">
+                                <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align:center; padding: 40px; color: #6B7280;">暂无角色</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 创建角色弹窗 -->
+<div id="roleModal" class="modal">
+    <div class="modal-content" style="max-width: 720px;">
+        <div class="modal-header">
+            <h3>创建角色</h3>
+            <button type="button" class="modal-close" onclick="closeRoleModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="post" action="{{ url_for('roles.add') }}">
+                <div class="modal-form-grid" style="grid-template-columns: 1fr 2fr; margin-bottom: 16px;">
+                    <div class="form-group">
+                        <label>角色名称 *</label>
+                        <input class="form-control" type="text" name="role_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>角色描述</label>
+                        <input class="form-control" type="text" name="description">
+                    </div>
+                </div>
+                <div style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 10px;">页面操作权限配置</div>
+                <div class="table-container" style="border: 1px solid #E5E7EB; border-radius: 8px;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>页面</th>
+                                {% for _, label in actions %}
+                                <th style="text-align:center;">{{ label }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for page in page_names %}
+                            <tr>
+                                <td>{{ page_labels[page] }}</td>
+                                {% for action, _ in actions %}
+                                <td style="text-align:center;">
+                                    <input type="checkbox" name="{{ page }}_{{ action }}" {% if page in ('users', 'roles') %}disabled{% endif %}>
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeRoleModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">创建角色</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑角色弹窗 -->
+<div id="editRoleModal" class="modal">
+    <div class="modal-content" style="max-width: 720px;">
+        <div class="modal-header">
+            <h3>配置角色权限</h3>
+            <button type="button" class="modal-close" onclick="closeEditRoleModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="post" action="{{ url_for('roles.edit') }}">
+                <input type="hidden" name="id" id="edit_role_id">
+                <div class="modal-form-grid" style="grid-template-columns: 1fr 2fr; margin-bottom: 16px;">
+                    <div class="form-group">
+                        <label>角色名称 *</label>
+                        <input class="form-control" type="text" name="role_name" id="edit_role_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>角色描述</label>
+                        <input class="form-control" type="text" name="description" id="edit_role_desc">
+                    </div>
+                </div>
+                <div style="font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 10px;">页面操作权限配置</div>
+                <div class="table-container" style="border: 1px solid #E5E7EB; border-radius: 8px;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>页面</th>
+                                {% for _, label in actions %}
+                                <th style="text-align:center;">{{ label }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for page in page_names %}
+                            <tr>
+                                <td>{{ page_labels[page] }}</td>
+                                {% for action, _ in actions %}
+                                <td style="text-align:center;">
+                                    <input type="checkbox" class="perm-chk-edit" name="{{ page }}_{{ action }}" data-page="{{ page }}" data-action="{{ action }}" {% if page in ('users', 'roles') %}disabled{% endif %}>
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditRoleModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openRoleModal() {
+        document.getElementById('roleModal').style.display = 'flex';
+    }
+    function closeRoleModal() {
+        document.getElementById('roleModal').style.display = 'none';
+    }
+    function openEditRoleModal(role) {
+        document.getElementById('edit_role_id').value = role.id;
+        document.getElementById('edit_role_name').value = role.role_name;
+        document.getElementById('edit_role_desc').value = role.description || '';
+        // 回填权限勾选
+        const matrix = role.perm_matrix || {};
+        document.querySelectorAll('#editRoleModal .perm-chk-edit').forEach(chk => {
+            const page = chk.dataset.page;
+            const action = chk.dataset.action;
+            chk.checked = !!(matrix[page] && matrix[page][action]);
+        });
+        // 禁止修改 admin 角色权限与名称
+        const isAdmin = role.role_name === 'admin';
+        document.getElementById('edit_role_name').readOnly = isAdmin;
+        document.querySelectorAll('#editRoleModal .perm-chk-edit').forEach(chk => { chk.disabled = isAdmin; });
+        document.getElementById('editRoleModal').style.display = 'flex';
+    }
+    function closeEditRoleModal() {
+        document.getElementById('editRoleModal').style.display = 'none';
+    }
+    window.onclick = function(event) {
+        if (event.target === document.getElementById('roleModal')) closeRoleModal();
+        if (event.target === document.getElementById('editRoleModal')) closeEditRoleModal();
+    };
+</script>
+{% endblock %}

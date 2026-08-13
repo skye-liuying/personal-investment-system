@@ -4,6 +4,7 @@ from flask import render_template, request
 from . import settlement_bp
 from database import get_db
 from paginate import paginate
+from blueprints.auth.helpers import scope_condition
 
 
 @settlement_bp.route('/')
@@ -13,6 +14,12 @@ def query():
 
     where_clauses = []
     params = []
+
+    # 数据隔离：普通用户只看自己的数据，admin 看全部
+    scope_sql, scope_params = scope_condition()
+    if scope_sql:
+        where_clauses.append(scope_sql)
+        params.extend(scope_params)
 
     code = request.args.get('code', '').strip()
     code_id = request.args.get('code_id', '').strip()

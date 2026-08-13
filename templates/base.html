@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}投资管家{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="layout">
@@ -26,26 +25,51 @@
                 </svg>
             </button>
             <nav class="nav">
+                {% if can('principal', 'view') %}
                 <a href="{{ url_for('principal.query') }}" class="nav-item {% if active_page == 'principal' %}active{% endif %}">
                     <span class="nav-icon">{% include 'icons/wallet.svg' %}</span>
                     <span>本金管理</span>
                 </a>
+                {% endif %}
+                {% if can('securities', 'view') %}
                 <a href="{{ url_for('securities.query') }}" class="nav-item {% if active_page == 'securities' %}active{% endif %}">
                     <span class="nav-icon">{% include 'icons/chart.svg' %}</span>
                     <span>证券管理</span>
                 </a>
+                {% endif %}
+                {% if can('otc_app', 'view') %}
                 <a href="{{ url_for('otc_app.query') }}" class="nav-item {% if active_page == 'otc_app' %}active{% endif %}">
                     <span class="nav-icon">{% include 'icons/mobile.svg' %}</span>
                     <span>场外APP管理</span>
                 </a>
+                {% endif %}
+                {% if can('statistics', 'view') %}
                 <a href="{{ url_for('statistics.query') }}" class="nav-item {% if active_page == 'statistics' %}active{% endif %}">
                     <span class="nav-icon">{% include 'icons/pie.svg' %}</span>
                     <span>统计分析</span>
                 </a>
+                {% endif %}
+                {% if can('settlement', 'view') %}
                 <a href="{{ url_for('settlement.query') }}" class="nav-item {% if active_page == 'settlement' %}active{% endif %}">
                     <span class="nav-icon">{% include 'icons/check.svg' %}</span>
                     <span>结清查询</span>
                 </a>
+                {% endif %}
+                {% if can('users', 'view') or can('roles', 'view') %}
+                <div class="nav-section-title">系统管理</div>
+                {% if can('users', 'view') %}
+                <a href="{{ url_for('users.query') }}" class="nav-item {% if active_page == 'users' %}active{% endif %}">
+                    <span class="nav-icon">{% include 'icons/users.svg' %}</span>
+                    <span>用户管理</span>
+                </a>
+                {% endif %}
+                {% if can('roles', 'view') %}
+                <a href="{{ url_for('roles.query') }}" class="nav-item {% if active_page == 'roles' %}active{% endif %}">
+                    <span class="nav-icon">{% include 'icons/shield.svg' %}</span>
+                    <span>角色权限</span>
+                </a>
+                {% endif %}
+                {% endif %}
             </nav>
         </aside>
 
@@ -55,6 +79,15 @@
                 <h1 class="page-title">{% block page_title %}投资管家{% endblock %}</h1>
                 <div class="topbar-actions">
                     {% block top_actions %}{% endblock %}
+                    {% if session.get('user_id') %}
+                    <div class="user-info">
+                        <span class="user-name">{{ session.get('username') }}</span>
+                        {% if session.get('is_admin') %}<span class="badge badge-warning">管理员</span>{% endif %}
+                        <form method="post" action="{{ url_for('auth.logout') }}" style="display:inline; margin:0;">
+                            <button type="submit" class="btn btn-secondary btn-sm">退出</button>
+                        </form>
+                    </div>
+                    {% endif %}
                 </div>
             </header>
 

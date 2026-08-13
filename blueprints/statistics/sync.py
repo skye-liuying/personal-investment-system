@@ -1,22 +1,33 @@
 """同步 statistics_summary 表 — 当 securities / otc_app 数据变动时调用"""
 
 
-def sync_statistics_summary(cursor, db, code_id):
-    """根据 code_id 重新汇总 securities+otc_app 数据，UPSERT 到 statistics_summary"""
+def sync_statistics_summary(cursor, db, code_id, user_id=None):
+    """根据 code_id 重新汇总 securities+otc_app 数据，UPSERT 到 statistics_summary
+
+    user_id：当前操作用户的 users.id，用于数据隔离；
+    为 None 时表示老数据兼容（不过滤）。
+    """
     if not code_id:
         return
+
+    # 数据隔离条件
+    user_cond = ''
+    user_args = ()
+    if user_id is not None:
+        user_cond = ' AND user_id = %s'
+        user_args = (user_id,)
 
     # 1. 计算持有状态
     cursor.execute("""
         SELECT COUNT(*) AS cnt FROM securities
         WHERE IFNULL(code_id, '') = %s AND status = '持有'
-    """, (code_id,))
+    """ + user_cond, (code_id,) + user_args)
     sec_holdings = int(cursor.fetchone()['cnt'])
 
     cursor.execute("""
         SELECT COUNT(*) AS cnt FROM otc_app
         WHERE IFNULL(code_id, '') = %s AND status = '持有'
-    """, (code_id,))
+    """ + user_cond, (code_id,) + user_args)
     otc_holdings = int(cursor.fetchone()['cnt'])
 
     status = '持有' if (sec_holdings > 0 or otc_holdings > 0) else '结清'
@@ -30,7 +41,7 @@ def sync_statistics_summary(cursor, db, code_id):
              + COALESCE(SUM(COALESCE(fees, 0)), 0) AS holding_amount
         FROM securities
         WHERE IFNULL(code_id, '') = %s AND status = '持有'
-    """, (code_id,))
+    """ + user_cond, (code_id,) + user_args)
     sec_amount = float(cursor.fetchone()['holding_amount'])
 
     cursor.execute("""
@@ -41,7 +52,7 @@ def sync_statistics_summary(cursor, db, code_id):
              + COALESCE(SUM(COALESCE(fees, 0)), 0) AS holding_amount
         FROM otc_app
         WHERE IFNULL(code_id, '') = %s AND status = '持有'
-    """, (code_id,))
+    """ + user_cond, (code_id,) + user_args)
     otc_amount = float(cursor.fetchone()['holding_amount'])
 
     holding_amount = round(sec_amount + otc_amount, 2)
@@ -50,15 +61,17 @@ def sync_statistics_summary(cursor, db, code_id):
     cursor.execute("""
         SELECT stock_code AS code, stock_name AS name, asset_type, id
         FROM securities WHERE IFNULL(code_id, '') = %s
+    """ + user_cond + """
         ORDER BY id DESC LIMIT 1
-    """, (code_id,))
+    """, (code_id,) + user_args)
     sec_row = cursor.fetchone()
 
     cursor.execute("""
         SELECT product_code AS code, product_name AS name, asset_type, id
         FROM otc_app WHERE IFNULL(code_id, '') = %s
+    """ + user_cond + """
         ORDER BY id DESC LIMIT 1
-    """, (code_id,))
+    """, (code_id,) + user_args)
     otc_row = cursor.fetchone()
 
     code = None
@@ -82,20 +95,40 @@ def sync_statistics_summary(cursor, db, code_id):
 
     # 4. 结清 → 删除；持有 → UPSERT
     if status == '结清':
-        cursor.execute("DELETE FROM statistics_summary WHERE code_id = %s", (code_id,))
+        if user_id is not None:
+            cursor.execute(
+                "DELETE FROM statistics_summary WHERE code_id = %s AND user_id = %s",
+                (code_id, user_id)
+            )
+        else:
+            cursor.execute("DELETE FROM statistics_summary WHERE code_id = %s", (code_id,))
     else:
-        cursor.execute("""
-            INSERT INTO statistics_summary (code_id, code, name, asset_type, holding_amount, status, source)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE
-                code = VALUES(code),
-                name = VALUES(name),
-                asset_type = VALUES(asset_type),
-                holding_amount = VALUES(holding_amount),
-                status = VALUES(status),
-                source = VALUES(source),
-                updated_at = CURRENT_TIMESTAMP
-        """, (code_id, code, name, asset_type, holding_amount, status, display_source))
+        if user_id is not None:
+            cursor.execute("""
+                INSERT INTO statistics_summary (user_id, code_id, code, name, asset_type, holding_amount, status, source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    code = VALUES(code),
+                    name = VALUES(name),
+                    asset_type = VALUES(asset_type),
+                    holding_amount = VALUES(holding_amount),
+                    status = VALUES(status),
+                    source = VALUES(source),
+                    updated_at = CURRENT_TIMESTAMP
+            """, (user_id, code_id, code, name, asset_type, holding_amount, status, display_source))
+        else:
+            cursor.execute("""
+                INSERT INTO statistics_summary (code_id, code, name, asset_type, holding_amount, status, source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    code = VALUES(code),
+                    name = VALUES(name),
+                    asset_type = VALUES(asset_type),
+                    holding_amount = VALUES(holding_amount),
+                    status = VALUES(status),
+                    source = VALUES(source),
+                    updated_at = CURRENT_TIMESTAMP
+            """, (code_id, code, name, asset_type, holding_amount, status, display_source))
     db.commit()
 
 

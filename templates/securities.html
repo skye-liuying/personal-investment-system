@@ -39,6 +39,8 @@
                         <option value="利息" {% if request.args.get('operation_type') == '利息' %}selected{% endif %}>利息</option>
                     </select>
                 </div>
+            </div>
+            <div class="search-row-grid">
                 <div class="search-field">
                     <label>资产类型</label>
                     <select name="asset_type" id="search_asset_type">
@@ -67,7 +69,9 @@
                     <input type="date" name="date_to" id="search_date_to" value="{{ request.args.get('date_to', '') }}">
                 </div>
                 <div class="search-actions">
+                    {% if can('securities', 'add') %}
                     <button type="button" class="btn btn-success" onclick="openAddModal()">新增</button>
+                    {% endif %}
                     <button type="button" class="btn btn-primary" onclick="doSearch()">搜索</button>
                     <a class="search-clear" href="{{ url_for('securities.query') }}">重置</a>
                 </div>
@@ -221,8 +225,10 @@
                     <td>¥{{ "%.2f"|format(record.fees) if record.fees else '0.00' }}</td>
                     <td><span class="badge {% if record.status == '持有' %}badge-success{% else %}badge-secondary{% endif %}">{{ record.status }}</span></td>
                     <td class="actions">
+                        {% if can('securities', 'add') %}
                         <button class="btn btn-success btn-sm" onclick="quickTrade(this, '买入')">买入</button>
                         <button class="btn btn-warning btn-sm" onclick="quickTrade(this, '卖出')">卖出</button>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}

@@ -6,10 +6,13 @@ from flask import flash, redirect, request, url_for
 from . import statistics_bp
 from database import get_db
 from .sync import sync_statistics_summary
+from blueprints.auth.helpers import get_current_user_id
 
 
 @statistics_bp.route('/settle', methods=['POST'])
 def settle():
+    current_user_id = get_current_user_id()
+
     code = request.form.get('code', '').strip()
     code_id = request.form.get('code_id', '').strip()
     source = request.form.get('source', '').strip()
@@ -43,33 +46,33 @@ def settle():
     if source == 'securities':
         cursor.execute(
             'SELECT broker FROM securities WHERE stock_code = %s'
-            ' AND IFNULL(code_id, \'\') = IFNULL(%s, \'\') LIMIT 1',
-            (code, code_id_val)
+            ' AND IFNULL(code_id, \'\') = IFNULL(%s, \'\') AND user_id = %s LIMIT 1',
+            (code, code_id_val, current_user_id)
         )
         row = cursor.fetchone()
         broker = row['broker'] if row else ''
 
         cursor.execute(
-            'INSERT INTO securities (broker, record_date, operation_type, stock_code, code_id,'
+            'INSERT INTO securities (user_id, broker, record_date, operation_type, stock_code, code_id,'
             ' stock_name, unit_price, quantity, total_amount, fees, asset_type, status) '
-            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-            (broker, settle_date, '卖出', code, code_id_val, product_name,
+            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+            (current_user_id, broker, settle_date, '卖出', code, code_id_val, product_name,
              unit_price, quantity, total_amount, fees, asset_type, '持有')
         )
     elif source == 'otc_app':
         cursor.execute(
             'SELECT app_name FROM otc_app WHERE product_code = %s'
-            ' AND IFNULL(code_id, \'\') = IFNULL(%s, \'\') LIMIT 1',
-            (code, code_id_val)
+            ' AND IFNULL(code_id, \'\') = IFNULL(%s, \'\') AND user_id = %s LIMIT 1',
+            (code, code_id_val, current_user_id)
         )
         row = cursor.fetchone()
         app_name = row['app_name'] if row else ''
 
         cursor.execute(
-            'INSERT INTO otc_app (app_name, record_date, operation_type, product_code, code_id,'
+            'INSERT INTO otc_app (user_id, app_name, record_date, operation_type, product_code, code_id,'
             ' product_name, unit_price, quantity, total_amount, fees, asset_type, status) '
-            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-            (app_name, settle_date, '卖出', code, code_id_val, product_name,
+            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+            (current_user_id, app_name, settle_date, '卖出', code, code_id_val, product_name,
              unit_price, quantity, total_amount, fees, asset_type, '持有')
         )
     else:
@@ -80,19 +83,19 @@ def settle():
 
     db.commit()
 
-    # 更新证券表状态为'结清'
+    # 更新证券表状态为'结清'（仅当前用户的数据）
     cursor.execute("""
         UPDATE securities SET status = '结清'
-        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'
-    """, (code, code_id_val))
+        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
 
-    # 更新场外APP表状态为'结清'
+    # 更新场外APP表状态为'结清'（仅当前用户的数据）
     cursor.execute("""
         UPDATE otc_app SET status = '结清'
-        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'
-    """, (code, code_id_val))
+        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
 
-    # 汇总投资金额与费用
+    # 汇总投资金额与费用（仅当前用户的数据）
     invest_amount = 0
     total_fees = 0
     interest_amount = 0
@@ -106,8 +109,8 @@ def settle():
                COALESCE(SUM(quantity), 0) AS buy_qty,
                MIN(record_date) AS min_date
         FROM securities
-        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '买入'
-    """, (code, code_id_val))
+        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '买入' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row and row['invest_amount']:
         invest_amount += float(row['invest_amount'])
@@ -127,8 +130,8 @@ def settle():
                COALESCE(SUM(quantity), 0) AS buy_qty,
                MIN(record_date) AS min_date
         FROM otc_app
-        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '买入'
-    """, (code, code_id_val))
+        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '买入' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row and row['invest_amount']:
         invest_amount += float(row['invest_amount'])
@@ -145,8 +148,8 @@ def settle():
     cursor.execute("""
         SELECT COALESCE(SUM(fees), 0) AS sell_fees
         FROM securities
-        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出'
-    """, (code, code_id_val))
+        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row:
         total_fees += float(row['sell_fees'])
@@ -154,8 +157,8 @@ def settle():
     cursor.execute("""
         SELECT COALESCE(SUM(fees), 0) AS sell_fees
         FROM otc_app
-        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出'
-    """, (code, code_id_val))
+        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row:
         total_fees += float(row['sell_fees'])
@@ -164,8 +167,8 @@ def settle():
     cursor.execute("""
         SELECT COALESCE(SUM(fees), 0) AS interest_fees
         FROM securities
-        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息'
-    """, (code, code_id_val))
+        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row:
         total_fees += float(row['interest_fees'])
@@ -173,8 +176,8 @@ def settle():
     cursor.execute("""
         SELECT COALESCE(SUM(fees), 0) AS interest_fees
         FROM otc_app
-        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息'
-    """, (code, code_id_val))
+        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row:
         total_fees += float(row['interest_fees'])
@@ -190,8 +193,8 @@ def settle():
     cursor.execute("""
         SELECT COALESCE(SUM(total_amount), 0) AS settle_total
         FROM securities
-        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出'
-    """, (code, code_id_val))
+        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row:
         settle_total += float(row['settle_total'])
@@ -199,8 +202,8 @@ def settle():
     cursor.execute("""
         SELECT COALESCE(SUM(total_amount), 0) AS settle_total
         FROM otc_app
-        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出'
-    """, (code, code_id_val))
+        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row:
         settle_total += float(row['settle_total'])
@@ -209,8 +212,8 @@ def settle():
     cursor.execute("""
         SELECT COALESCE(SUM(total_amount), 0) AS interest_amount
         FROM securities
-        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息'
-    """, (code, code_id_val))
+        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row:
         interest_amount += float(row['interest_amount'])
@@ -218,8 +221,8 @@ def settle():
     cursor.execute("""
         SELECT COALESCE(SUM(total_amount), 0) AS interest_amount
         FROM otc_app
-        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息'
-    """, (code, code_id_val))
+        WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息' AND user_id = %s
+    """, (code, code_id_val, current_user_id))
     row = cursor.fetchone()
     if row:
         interest_amount += float(row['interest_amount'])
@@ -228,19 +231,19 @@ def settle():
 
     profit = settle_total - invest_amount - total_fees
 
-    # 写入结算记录
+    # 写入结算记录（带 user_id）
     cursor.execute(
-        'INSERT INTO settlements (settle_date, code, code_id, product_name, asset_type,'
+        'INSERT INTO settlements (user_id, settle_date, code, code_id, product_name, asset_type,'
         ' invest_amount, settle_amount, profit, fees, holding_days, quantity) '
-        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-        (settle_date, code, code_id_val, product_name, asset_type,
+        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+        (current_user_id, settle_date, code, code_id_val, product_name, asset_type,
          invest_amount, settle_total, profit, total_fees, holding_days, buy_qty)
     )
     db.commit()
 
     # 同步统计汇总表
     if code_id_val:
-        sync_statistics_summary(cursor, db, code_id_val)
+        sync_statistics_summary(cursor, db, code_id_val, user_id=current_user_id)
         db.commit()
 
     cursor.close()

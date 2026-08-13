@@ -3,11 +3,13 @@
 from flask import flash, redirect, request, url_for
 from . import securities_bp
 from database import get_db
+from blueprints.auth.helpers import get_current_user_id
 from blueprints.statistics.sync import sync_statistics_summary
 
 
 @securities_bp.route('/add', methods=['POST'])
 def add():
+    current_user_id = get_current_user_id()
     broker = request.form.get('broker', '').strip()
     record_date = request.form.get('record_date', '').strip()
     operation_type = request.form.get('operation_type', '').strip()
@@ -47,8 +49,8 @@ def add():
         cursor.execute("""
             SELECT COALESCE(SUM(CASE WHEN operation_type='买入' THEN quantity ELSE -quantity END), 0) AS hold_qty
             FROM securities
-            WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'
-        """, (stock_code, code_id_val))
+            WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有' AND user_id = %s
+        """, (stock_code, code_id_val, current_user_id))
         row = cursor.fetchone()
         hold_qty = int(row['hold_qty']) if row and row['hold_qty'] else 0
         if quantity > hold_qty:
@@ -58,22 +60,22 @@ def add():
             return redirect(url_for('securities.query'))
 
     cursor.execute(
-        'INSERT INTO securities (broker, record_date, operation_type, asset_type, stock_code, code_id, stock_name, '
+        'INSERT INTO securities (user_id, broker, record_date, operation_type, asset_type, stock_code, code_id, stock_name, '
         'unit_price, quantity, total_amount, fees, status) '
-        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-        (broker, record_date, operation_type, asset_type, stock_code, code_id or None, stock_name,
+        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+        (current_user_id, broker, record_date, operation_type, asset_type, stock_code, code_id or None, stock_name,
          unit_price, quantity, total_amount, fees, status)
     )
     db.commit()
 
     # 同步统计汇总表
     if code_id:
-        sync_statistics_summary(cursor, db, code_id)
+        sync_statistics_summary(cursor, db, code_id, user_id=current_user_id)
         db.commit()
 
     # 卖出时自动判断是否结清：相同 code_id + stock_code 的卖出数量 >= 买入数量时，自动结清并写入结算记录
     if operation_type == '卖出':
-        auto_settle(cursor, db, stock_code, code_id or None, stock_name, asset_type, record_date)
+        auto_settle(cursor, db, stock_code, code_id or None, stock_name, asset_type, record_date, current_user_id)
 
     cursor.close()
     db.close()
@@ -87,7 +89,7 @@ def add():
     return redirect(url_for('securities.query') + '?' + urlencode(params))
 
 
-def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, record_date):
+def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, record_date, user_id):
     """同一个 code_id + stock_code 的卖出数量 >= 买入数量时，自动标记结清并生成结算记录"""
     cursor.execute("""
         SELECT COALESCE(SUM(quantity), 0) AS buy_qty,
@@ -98,7 +100,8 @@ def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, r
         WHERE stock_code = %s
           AND IFNULL(code_id, '') = IFNULL(%s, '')
           AND operation_type = '买入'
-    """, (stock_code, code_id_param))
+          AND user_id = %s
+    """, (stock_code, code_id_param, user_id))
     buy_row = cursor.fetchone()
     buy_qty = float(buy_row['buy_qty'])
     buy_amount = float(buy_row['buy_amount'])
@@ -113,7 +116,8 @@ def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, r
         WHERE stock_code = %s
           AND IFNULL(code_id, '') = IFNULL(%s, '')
           AND operation_type = '卖出'
-    """, (stock_code, code_id_param))
+          AND user_id = %s
+    """, (stock_code, code_id_param, user_id))
     sell_row = cursor.fetchone()
     sell_qty = float(sell_row['sell_qty'])
     sell_amount = float(sell_row['sell_amount'])
@@ -127,7 +131,8 @@ def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, r
         WHERE stock_code = %s
           AND IFNULL(code_id, '') = IFNULL(%s, '')
           AND operation_type = '利息'
-    """, (stock_code, code_id_param))
+          AND user_id = %s
+    """, (stock_code, code_id_param, user_id))
     interest_row = cursor.fetchone()
     interest_amount = float(interest_row['interest_amount'])
     interest_fees = float(interest_row['interest_fees'])
@@ -138,7 +143,8 @@ def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, r
             UPDATE securities SET status = '结清'
             WHERE stock_code = %s
               AND IFNULL(code_id, '') = IFNULL(%s, '')
-        """, (stock_code, code_id_param))
+              AND user_id = %s
+        """, (stock_code, code_id_param, user_id))
 
         # 总费用 = 买入费用 + 卖出费用 + 利息费用
         total_fees = buy_fees + sell_fees + interest_fees
@@ -155,16 +161,16 @@ def auto_settle(cursor, db, stock_code, code_id_param, stock_name, asset_type, r
         profit = total_settle - buy_amount - total_fees
 
         cursor.execute(
-            'INSERT INTO settlements (settle_date, code, code_id, product_name, asset_type, '
+            'INSERT INTO settlements (user_id, settle_date, code, code_id, product_name, asset_type, '
             'invest_amount, settle_amount, profit, fees, holding_days) '
-            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-            (record_date, stock_code, code_id_param, stock_name, asset_type,
+            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+            (user_id, record_date, stock_code, code_id_param, stock_name, asset_type,
              buy_amount, total_settle, profit, total_fees, holding_days)
         )
         db.commit()
         # 同步统计汇总表
         if code_id_param:
-            sync_statistics_summary(cursor, db, code_id_param)
+            sync_statistics_summary(cursor, db, code_id_param, user_id=user_id)
             db.commit()
         flash('已自动结清，收益：¥{:,.2f}（含利息 ¥{:,.2f}），费用：¥{:,.2f}，持有 {} 天'.format(
             profit, interest_amount, total_fees, holding_days if holding_days else '?'), 'info')

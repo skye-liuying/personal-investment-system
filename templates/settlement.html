@@ -78,7 +78,9 @@
 <div class="card table-card">
     <div class="card-header">
         结清记录
+        {% if can('settlement', 'add') %}
         <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ 新增记录</button>
+        {% endif %}
     </div>
     <div class="table-container">
         <table class="data-table">
@@ -119,8 +121,10 @@
                     <td>{{ record.holding_days if record.holding_days is not none else '-' }}天</td>
                     <td>{{ record.settle_date }}</td>
                     <td>
+                        {% if can('settlement', 'edit') %}
                         <button class="btn btn-sm btn-edit" onclick='openEditModal({{ record | tojson | safe }})'>编辑</button>
                         <button class="btn btn-sm btn-warning" onclick="correctSettle({{ record.id }}, '{{ record.product_name }}')">数据矫正</button>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}

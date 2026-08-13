@@ -6,12 +6,16 @@ from flask import render_template, request
 from . import statistics_bp
 from database import get_db
 from paginate import paginate
+from blueprints.auth.helpers import scope_condition
 
 
 @statistics_bp.route('/')
 def query():
     db = get_db()
     cursor = db.cursor()
+
+    # 数据隔离：普通用户只看自己的数据，admin 看全部
+    scope_sql, scope_params = scope_condition()
 
     code = request.args.get('code', '').strip()
     name = request.args.get('name', '').strip()
@@ -20,14 +24,24 @@ def query():
     status = request.args.get('status', '').strip()
 
     # —— 资产类型占比计算（从 statistics_summary 查询） ——
-    cursor.execute("""
-        SELECT
-            asset_type,
-            COALESCE(SUM(holding_amount), 0) AS amount
-        FROM statistics_summary
-        WHERE status = '持有'
-        GROUP BY asset_type
-    """)
+    if scope_sql:
+        cursor.execute("""
+            SELECT
+                asset_type,
+                COALESCE(SUM(holding_amount), 0) AS amount
+            FROM statistics_summary
+            WHERE status = '持有' AND """ + scope_sql + """
+            GROUP BY asset_type
+        """, scope_params)
+    else:
+        cursor.execute("""
+            SELECT
+                asset_type,
+                COALESCE(SUM(holding_amount), 0) AS amount
+            FROM statistics_summary
+            WHERE status = '持有'
+            GROUP BY asset_type
+        """)
     raw_type_stats = cursor.fetchall()
     total = sum(float(row['amount']) for row in raw_type_stats)
     type_stats = []
@@ -44,6 +58,9 @@ def query():
     where_clauses = []
     params = []
 
+    if scope_sql:
+        where_clauses.append(scope_sql)
+        params.extend(scope_params)
     if code:
         where_clauses.append('(code LIKE %s)')
         params.append(f'%{code}%')

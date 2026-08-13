@@ -5,6 +5,7 @@ from . import securities_bp
 from . import get_overview
 from database import get_db
 from paginate import paginate
+from blueprints.auth.helpers import scope_condition, get_current_user_id
 
 
 @securities_bp.route('/')
@@ -14,6 +15,12 @@ def query():
 
     where_clauses = []
     params = []
+
+    # 数据隔离：普通用户只看自己的数据，admin 看全部
+    scope_sql, scope_params = scope_condition()
+    if scope_sql:
+        where_clauses.append(scope_sql)
+        params.extend(scope_params)
 
     broker = request.args.get('broker', '').strip()
     stock_code = request.args.get('stock_code', '').strip()
@@ -80,13 +87,16 @@ def query():
     records = cursor.fetchall()
 
     # 查询最新一笔记录的券商，供新增弹窗默认填充
-    cursor.execute('SELECT broker FROM securities ORDER BY id DESC LIMIT 1')
+    if scope_sql:
+        cursor.execute('SELECT broker FROM securities WHERE user_id = %s ORDER BY id DESC LIMIT 1', scope_params)
+    else:
+        cursor.execute('SELECT broker FROM securities ORDER BY id DESC LIMIT 1')
     last_row = cursor.fetchone()
     last_broker = last_row['broker'] if last_row else ''
 
     cursor.close()
 
-    overview = get_overview(db)
+    overview = get_overview(db, where_clauses, params)
     db.close()
 
     return render_template('securities.html',

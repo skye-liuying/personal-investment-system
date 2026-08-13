@@ -36,8 +36,10 @@
                     </select>
                 </div>
                 <div class="search-actions">
+                    {% if can('principal', 'add') %}
                     <button type="button" class="btn btn-success" onclick="openAddModal('充值')">充值</button>
                     <button type="button" class="btn btn-warning" onclick="openAddModal('取现')">取现</button>
+                    {% endif %}
                     <button type="button" class="btn btn-primary" onclick="doSearch()">搜索</button>
                     <a class="search-clear" href="{{ url_for('principal.query') }}">重置</a>
                 </div>
@@ -96,6 +98,7 @@
 </div>
 
 <!-- 记录表格 -->
+{% set has_principal_ops = can('principal', 'edit') or can('principal', 'delete') %}
 <div class="card table-card">
     <div class="card-header">本金记录</div>
     <div class="table-container">
@@ -106,7 +109,7 @@
                     <th>日期</th>
                     <th>类型</th>
                     <th>金额</th>
-                    <th>操作</th>
+                    {% if has_principal_ops %}<th>操作</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -120,16 +123,22 @@
                         </span>
                     </td>
                     <td class="amount-col">¥{{ "%.2f"|format(record.amount) }}</td>
+                    {% if has_principal_ops %}
                     <td class="actions">
+                        {% if can('principal', 'edit') %}
                         <button type="button" class="btn btn-sm btn-edit" data-edit-url="{{ url_for('principal.edit', id=record.id) }}" onclick="openEditModal(this, {{ record.id }}, '{{ record.broker|replace("'", "\\'") }}', '{{ record.record_date }}', '{{ record.operation_type }}', {{ record.amount }})">编辑</button>
+                        {% endif %}
+                        {% if can('principal', 'delete') %}
                         <form method="POST" action="{{ url_for('principal.delete') }}" style="display:inline" onsubmit="return confirm('确定删除这条记录吗？')">
                             <input type="hidden" name="id" value="{{ record.id }}">
                             <button type="submit" class="btn btn-danger btn-sm">删除</button>
                         </form>
+                        {% endif %}
                     </td>
+                    {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="5" class="empty-state">暂无本金记录</td></tr>
+                <tr><td colspan="{{ 5 if has_principal_ops else 4 }}" class="empty-state">暂无本金记录</td></tr>
                 {% endfor %}
             </tbody>
         </table>

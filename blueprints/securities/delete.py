@@ -3,6 +3,7 @@
 from flask import flash, redirect, request, url_for
 from . import securities_bp
 from database import get_db
+from blueprints.auth.helpers import get_current_user_id, is_admin
 from blueprints.statistics.sync import sync_statistics_summary
 
 
@@ -23,17 +24,29 @@ def delete():
     db = get_db()
     cursor = db.cursor()
 
-    # 删除前获取 code_id 用于同步
-    cursor.execute('SELECT code_id FROM securities WHERE id = %s', (record_id,))
-    row = cursor.fetchone()
-    code_id = row['code_id'] if row and row['code_id'] else None
-
-    cursor.execute('DELETE FROM securities WHERE id = %s', (record_id,))
+    # 删除前获取 code_id 用于同步（非 admin 只能删除自己的记录）
+    if is_admin():
+        cursor.execute('SELECT code_id FROM securities WHERE id = %s', (record_id,))
+        row = cursor.fetchone()
+        code_id = row['code_id'] if row and row['code_id'] else None
+        cursor.execute('DELETE FROM securities WHERE id = %s', (record_id,))
+    else:
+        current_user_id = get_current_user_id()
+        cursor.execute(
+            'SELECT code_id FROM securities WHERE id = %s AND user_id = %s',
+            (record_id, current_user_id)
+        )
+        row = cursor.fetchone()
+        code_id = row['code_id'] if row and row['code_id'] else None
+        cursor.execute(
+            'DELETE FROM securities WHERE id = %s AND user_id = %s',
+            (record_id, current_user_id)
+        )
     db.commit()
 
     # 同步统计汇总表
     if code_id:
-        sync_statistics_summary(cursor, db, code_id)
+        sync_statistics_summary(cursor, db, code_id, user_id=get_current_user_id())
         db.commit()
 
     cursor.close()

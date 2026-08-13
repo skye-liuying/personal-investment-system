@@ -3,11 +3,13 @@
 from flask import flash, redirect, request, url_for
 from . import otc_app_bp
 from database import get_db
+from blueprints.auth.helpers import get_current_user_id
 from blueprints.statistics.sync import sync_statistics_summary
 
 
 @otc_app_bp.route('/add', methods=['POST'])
 def add():
+    current_user_id = get_current_user_id()
     app_name = request.form.get('app_name', '').strip()
     record_date = request.form.get('record_date', '').strip()
     operation_type = request.form.get('operation_type', '').strip()
@@ -47,8 +49,8 @@ def add():
         cursor.execute("""
             SELECT COALESCE(SUM(CASE WHEN operation_type='买入' THEN quantity ELSE -quantity END), 0) AS hold_qty
             FROM otc_app
-            WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'
-        """, (product_code, code_id_val))
+            WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有' AND user_id = %s
+        """, (product_code, code_id_val, current_user_id))
         row = cursor.fetchone()
         hold_qty = float(row['hold_qty']) if row and row['hold_qty'] else 0
         if quantity > hold_qty:
@@ -58,25 +60,25 @@ def add():
             return redirect(url_for('otc_app.query'))
 
     cursor.execute(
-        'INSERT INTO otc_app (app_name, record_date, operation_type, asset_type, product_code, code_id, product_name, '
+        'INSERT INTO otc_app (user_id, app_name, record_date, operation_type, asset_type, product_code, code_id, product_name, '
         'unit_price, quantity, total_amount, fees, status) '
-        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-        (app_name, record_date, operation_type, asset_type, product_code, code_id or None, product_name,
+        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+        (current_user_id, app_name, record_date, operation_type, asset_type, product_code, code_id or None, product_name,
          unit_price, quantity, total_amount, fees, status)
     )
     db.commit()
 
     # 同步统计汇总表
     if code_id:
-        sync_statistics_summary(cursor, db, code_id)
+        sync_statistics_summary(cursor, db, code_id, user_id=current_user_id)
         db.commit()
 
     # 卖出时自动检查是否可结清
     if operation_type == '卖出' and quantity and code_id:
-        _try_settle(cursor, db, code_id, product_code, product_name, asset_type, record_date)
+        _try_settle(cursor, db, code_id, product_code, product_name, asset_type, record_date, current_user_id)
     elif operation_type == '卖出' and quantity:
         # 没有关联编号时，仅按产品代码匹配
-        _try_settle(cursor, db, None, product_code, product_name, asset_type, record_date)
+        _try_settle(cursor, db, None, product_code, product_name, asset_type, record_date, current_user_id)
 
     cursor.close()
     db.close()
@@ -86,16 +88,17 @@ def add():
     return redirect(url_for('otc_app.query', date_from=record_date, date_to=record_date))
 
 
-def _try_settle(cursor, db, code_id, product_code, product_name, asset_type, settle_date):
+def _try_settle(cursor, db, code_id, product_code, product_name, asset_type, settle_date, user_id):
     """检查卖出后是否需要自动结清此产品，并在结清查询页插入记录"""
+    user_cond = ' AND user_id = %s'
     if code_id:
-        where_buy = "code_id = %s AND product_code = %s AND operation_type = %s AND status = '持有'"
-        where_all = "code_id = %s AND product_code = %s AND status = '持有'"
-        params_match = (code_id, product_code)
+        where_buy = "code_id = %s AND product_code = %s AND operation_type = %s AND status = '持有'" + user_cond
+        where_all = "code_id = %s AND product_code = %s AND status = '持有'" + user_cond
+        params_match = (code_id, product_code, user_id)
     else:
-        where_buy = "code_id IS NULL AND product_code = %s AND operation_type = %s AND status = '持有'"
-        where_all = "code_id IS NULL AND product_code = %s AND status = '持有'"
-        params_match = (product_code,)
+        where_buy = "code_id IS NULL AND product_code = %s AND operation_type = %s AND status = '持有'" + user_cond
+        where_all = "code_id IS NULL AND product_code = %s AND status = '持有'" + user_cond
+        params_match = (product_code, user_id)
 
     # 买入总份额
     cursor.execute(
@@ -141,16 +144,16 @@ def _try_settle(cursor, db, code_id, product_code, product_name, asset_type, set
 
     # 插入结清记录
     cursor.execute(
-        'INSERT INTO settlements (settle_date, code, code_id, product_name, asset_type, '
+        'INSERT INTO settlements (user_id, settle_date, code, code_id, product_name, asset_type, '
         'invest_amount, settle_amount, profit, fees, holding_days, quantity) '
-        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-        (settle_date, product_code, code_id or None, product_name, asset_type,
+        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+        (user_id, settle_date, product_code, code_id or None, product_name, asset_type,
          invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty)
     )
     db.commit()
     # 同步统计汇总表
     if code_id:
-        sync_statistics_summary(cursor, db, code_id)
+        sync_statistics_summary(cursor, db, code_id, user_id=user_id)
         db.commit()
 
     flash(f'卖出份额与买入份额相等，{product_name}（{product_code}）已自动结清，记录已写入结清查询页', 'success')

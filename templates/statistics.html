@@ -118,9 +118,13 @@
                     <td><span class="badge {% if row.status == '持有' %}badge-success{% else %}badge-secondary{% endif %}">{{ row.status }}</span></td>
                     <td class="actions">
                         {% if row.status == '持有' %}
+                        {% if can('statistics', 'add') %}
                         <button class="btn btn-success btn-sm" onclick="openTradeModal('买入', '{{ row.code }}', '{{ row.code_id }}', '{{ row.name }}', '{{ row.asset_type }}', '{{ row.source }}')">买入</button>
                         <button class="btn btn-warning btn-sm" onclick="openTradeModal('卖出', '{{ row.code }}', '{{ row.code_id }}', '{{ row.name }}', '{{ row.asset_type }}', '{{ row.source }}')">卖出</button>
+                        {% endif %}
+                        {% if can('statistics', 'edit') %}
                         <button class="btn btn-secondary btn-sm" onclick="settleCode('{{ row.code }}', '{{ row.code_id }}', '{{ row.name }}', '{{ row.amount }}', '{{ row.asset_type }}', '{{ row.source }}')">结清</button>
+                        {% endif %}
                         {% else %}
                         <span style="color: #9CA3AF; font-size: 12px;">已结清</span>
                         {% endif %}

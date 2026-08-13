@@ -67,7 +67,9 @@
                     <input type="date" name="date_to" id="search_date_to" value="{{ request.args.get('date_to', '') }}">
                 </div>
                 <div class="search-actions">
+                    {% if can('otc_app', 'add') %}
                     <button type="button" class="btn btn-success" onclick="openAddOtcModal()">+ 新增</button>
+                    {% endif %}
                     <button type="button" class="btn btn-primary" onclick="doSearch()">搜索</button>
                     <a class="search-clear" href="{{ url_for('otc_app.query') }}">重置</a>
                 </div>
@@ -134,8 +136,10 @@
                     <td>¥{{ "%.2f"|format(record.fees) if record.fees else '0.00' }}</td>
                     <td><span class="badge {% if record.status == '持有' %}badge-success{% else %}badge-secondary{% endif %}">{{ record.status }}</span></td>
                     <td class="actions">
+                        {% if can('otc_app', 'add') %}
                         <button class="btn btn-success btn-sm" onclick="quickTrade(this, '买入')">买入</button>
                         <button class="btn btn-warning btn-sm" onclick="quickTrade(this, '卖出')">卖出</button>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}

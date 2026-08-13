@@ -9,6 +9,7 @@ from datetime import datetime
 from flask import flash, redirect, request, url_for
 from . import settlement_bp
 from database import get_db
+from blueprints.auth.helpers import get_current_user_id, is_admin
 
 
 @settlement_bp.route('/correct', methods=['POST'])
@@ -22,8 +23,14 @@ def correct():
     db = get_db()
     cursor = db.cursor()
 
-    # ——— 查找结清记录 ———
-    cursor.execute('SELECT * FROM settlements WHERE id = %s', (record_id,))
+    # ——— 查找结清记录（非 admin 只能矫正自己的记录）———
+    if is_admin():
+        cursor.execute('SELECT * FROM settlements WHERE id = %s', (record_id,))
+    else:
+        cursor.execute(
+            'SELECT * FROM settlements WHERE id = %s AND user_id = %s',
+            (record_id, get_current_user_id())
+        )
     settle = cursor.fetchone()
     if not settle:
         cursor.close()
@@ -41,6 +48,13 @@ def correct():
     buy_qty = 0.0
     first_buy_date = None
 
+    # 数据隔离条件：非 admin 只能基于自己的证券/场外记录矫正
+    user_cond = ''
+    user_args = ()
+    if not is_admin():
+        user_cond = ' AND user_id = %s'
+        user_args = (get_current_user_id(),)
+
     # ——— 从 securities 汇总 ———
     cursor.execute("""
         SELECT MAX(stock_name) AS product_name, MAX(asset_type) AS asset_type,
@@ -50,7 +64,7 @@ def correct():
                MIN(record_date) AS min_date
         FROM securities
         WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '买入'
-    """, (code, code_id))
+    """ + user_cond, (code, code_id) + user_args)
     row = cursor.fetchone()
     if row and row['invest_amount']:
         invest_amount += float(row['invest_amount'])
@@ -64,7 +78,7 @@ def correct():
                COALESCE(SUM(fees), 0) AS sell_fees
         FROM securities
         WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出'
-    """, (code, code_id))
+    """ + user_cond, (code, code_id) + user_args)
     row = cursor.fetchone()
     if row:
         sell_total += float(row['settle_total'])
@@ -75,7 +89,7 @@ def correct():
                COALESCE(SUM(fees), 0) AS interest_fees
         FROM securities
         WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息'
-    """, (code, code_id))
+    """ + user_cond, (code, code_id) + user_args)
     row = cursor.fetchone()
     if row:
         interest_amount += float(row['interest_amount'])
@@ -90,7 +104,7 @@ def correct():
                MIN(record_date) AS min_date
         FROM otc_app
         WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '买入'
-    """, (code, code_id))
+    """ + user_cond, (code, code_id) + user_args)
     row = cursor.fetchone()
     if row and row['invest_amount']:
         invest_amount += float(row['invest_amount'])
@@ -104,7 +118,7 @@ def correct():
                COALESCE(SUM(fees), 0) AS sell_fees
         FROM otc_app
         WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '卖出'
-    """, (code, code_id))
+    """ + user_cond, (code, code_id) + user_args)
     row = cursor.fetchone()
     if row:
         sell_total += float(row['settle_total'])
@@ -115,7 +129,7 @@ def correct():
                COALESCE(SUM(fees), 0) AS interest_fees
         FROM otc_app
         WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND operation_type = '利息'
-    """, (code, code_id))
+    """ + user_cond, (code, code_id) + user_args)
     row = cursor.fetchone()
     if row:
         interest_amount += float(row['interest_amount'])
@@ -148,24 +162,35 @@ def correct():
     # ——— 将关联编号下所有持有状态的记录改为结清 ———
     updated_sec = cursor.execute(
         "UPDATE securities SET status = '结清'"
-        " WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'",
-        (code, code_id)
+        " WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'"
+        + user_cond,
+        (code, code_id) + user_args
     )
     updated_otc = cursor.execute(
         "UPDATE otc_app SET status = '结清'"
-        " WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'",
-        (code, code_id)
+        " WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'"
+        + user_cond,
+        (code, code_id) + user_args
     )
     synced = updated_sec + updated_otc
 
     # ——— 更新结清记录 ———
-    cursor.execute(
-        'UPDATE settlements SET invest_amount = %s, settle_amount = %s, profit = %s,'
-        ' fees = %s, holding_days = %s, quantity = %s'
-        ' WHERE id = %s',
-        (invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty if buy_qty > 0 else None,
-         record_id)
-    )
+    if is_admin():
+        cursor.execute(
+            'UPDATE settlements SET invest_amount = %s, settle_amount = %s, profit = %s,'
+            ' fees = %s, holding_days = %s, quantity = %s'
+            ' WHERE id = %s',
+            (invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty if buy_qty > 0 else None,
+             record_id)
+        )
+    else:
+        cursor.execute(
+            'UPDATE settlements SET invest_amount = %s, settle_amount = %s, profit = %s,'
+            ' fees = %s, holding_days = %s, quantity = %s'
+            ' WHERE id = %s AND user_id = %s',
+            (invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty if buy_qty > 0 else None,
+             record_id, get_current_user_id())
+        )
     db.commit()
     cursor.close()
     db.close()

@@ -6,10 +6,13 @@ from flask import flash, redirect, request, url_for
 from . import statistics_bp
 from database import get_db
 from .sync import sync_statistics_summary
+from blueprints.auth.helpers import get_current_user_id
 
 
 @statistics_bp.route('/trade', methods=['POST'])
 def trade():
+    current_user_id = get_current_user_id()
+
     source = request.form.get('source', '').strip()
     broker = request.form.get('broker', '').strip()
     record_date = request.form.get('record_date', '').strip()
@@ -47,8 +50,8 @@ def trade():
             cursor.execute("""
                 SELECT COALESCE(SUM(CASE WHEN operation_type='买入' THEN quantity ELSE -quantity END), 0) AS hold_qty
                 FROM securities
-                WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'
-            """, (code, code_id_val))
+                WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有' AND user_id = %s
+            """, (code, code_id_val, current_user_id))
             row = cursor.fetchone()
             hold_qty = int(row['hold_qty']) if row and row['hold_qty'] else 0
             if quantity > hold_qty:
@@ -58,10 +61,10 @@ def trade():
                 return redirect(url_for('statistics.query'))
 
         cursor.execute(
-            'INSERT INTO securities (broker, record_date, operation_type, asset_type, stock_code, '
+            'INSERT INTO securities (user_id, broker, record_date, operation_type, asset_type, stock_code, '
             'code_id, stock_name, unit_price, quantity, total_amount, fees, status) '
-            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-            (broker, record_date, operation_type, asset_type, code, code_id_val,
+            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+            (current_user_id, broker, record_date, operation_type, asset_type, code, code_id_val,
              name, unit_price, quantity, total_amount, fees, '持有')
         )
     elif source == 'otc_app':
@@ -70,8 +73,8 @@ def trade():
             cursor.execute("""
                 SELECT COALESCE(SUM(CASE WHEN operation_type='买入' THEN quantity ELSE -quantity END), 0) AS hold_qty
                 FROM otc_app
-                WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'
-            """, (code, code_id_val))
+                WHERE product_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有' AND user_id = %s
+            """, (code, code_id_val, current_user_id))
             row = cursor.fetchone()
             hold_qty = float(row['hold_qty']) if row and row['hold_qty'] else 0
             if quantity > hold_qty:
@@ -81,10 +84,10 @@ def trade():
                 return redirect(url_for('statistics.query'))
 
         cursor.execute(
-            'INSERT INTO otc_app (app_name, record_date, operation_type, asset_type, product_code, '
+            'INSERT INTO otc_app (user_id, app_name, record_date, operation_type, asset_type, product_code, '
             'code_id, product_name, unit_price, quantity, total_amount, fees, status) '
-            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-            (broker, record_date, operation_type, asset_type, code, code_id_val,
+            'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+            (current_user_id, broker, record_date, operation_type, asset_type, code, code_id_val,
              name, unit_price, quantity, total_amount, fees, '持有')
         )
     else:
@@ -96,15 +99,15 @@ def trade():
     db.commit()
 
     # 同步统计汇总表
-    sync_statistics_summary(cursor, db, code_id_val)
+    sync_statistics_summary(cursor, db, code_id_val, user_id=current_user_id)
     db.commit()
 
     # 卖出时自动检查是否可结清
     if operation_type == '卖出' and code_id_val:
         if source == 'securities':
-            _auto_settle_securities(cursor, db, code, code_id_val, name, asset_type, record_date)
+            _auto_settle_securities(cursor, db, code, code_id_val, name, asset_type, record_date, current_user_id)
         else:
-            _auto_settle_otc(cursor, db, code, code_id_val, name, asset_type, record_date)
+            _auto_settle_otc(cursor, db, code, code_id_val, name, asset_type, record_date, current_user_id)
 
     cursor.close()
     db.close()
@@ -113,15 +116,15 @@ def trade():
     return redirect(url_for('statistics.query'))
 
 
-def _auto_settle_securities(cursor, db, stock_code, code_id, stock_name, asset_type, record_date):
-    """证券：卖出后剩余份额为0时，自动结清"""
+def _auto_settle_securities(cursor, db, stock_code, code_id, stock_name, asset_type, record_date, user_id):
+    """证券：卖出后剩余份额为0时，自动结清（仅统计当前用户的数据）"""
     # 买入总份额
     cursor.execute("""
         SELECT COALESCE(SUM(quantity), 0) AS buy_qty
         FROM securities
         WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '')
-          AND operation_type = '买入' AND status = '持有'
-    """, (stock_code, code_id))
+          AND operation_type = '买入' AND status = '持有' AND user_id = %s
+    """, (stock_code, code_id, user_id))
     buy_qty = float(cursor.fetchone()['buy_qty'])
 
     # 卖出总份额
@@ -129,8 +132,8 @@ def _auto_settle_securities(cursor, db, stock_code, code_id, stock_name, asset_t
         SELECT COALESCE(SUM(quantity), 0) AS sell_qty
         FROM securities
         WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '')
-          AND operation_type = '卖出' AND status = '持有'
-    """, (stock_code, code_id))
+          AND operation_type = '卖出' AND status = '持有' AND user_id = %s
+    """, (stock_code, code_id, user_id))
     sell_qty = float(cursor.fetchone()['sell_qty'])
 
     if buy_qty <= 0 or sell_qty < buy_qty + 0.0001 - 0.0001:
@@ -148,8 +151,8 @@ def _auto_settle_securities(cursor, db, stock_code, code_id, stock_name, asset_t
             MIN(record_date) AS first_date,
             MAX(record_date) AS last_date
         FROM securities
-        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有'
-    """, (stock_code, code_id))
+        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND status = '持有' AND user_id = %s
+    """, (stock_code, code_id, user_id))
     row = cursor.fetchone()
     buy_amount = float(row['buy_amount'])
     buy_fees = float(row['buy_fees'])
@@ -160,11 +163,11 @@ def _auto_settle_securities(cursor, db, stock_code, code_id, stock_name, asset_t
     first_date = row['first_date']
     last_date = row['last_date']
 
-    # 标记所有记录为结清
+    # 标记所有记录为结清（仅当前用户）
     cursor.execute("""
         UPDATE securities SET status = '结清'
-        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '')
-    """, (stock_code, code_id))
+        WHERE stock_code = %s AND IFNULL(code_id, '') = IFNULL(%s, '') AND user_id = %s
+    """, (stock_code, code_id, user_id))
 
     total_fees = buy_fees + sell_fees + interest_fees
     total_settle = sell_amount + interest_amount
@@ -177,36 +180,36 @@ def _auto_settle_securities(cursor, db, stock_code, code_id, stock_name, asset_t
                         datetime.strptime(str(first_date), '%Y-%m-%d')).days
 
     cursor.execute(
-        'INSERT INTO settlements (settle_date, code, code_id, product_name, asset_type, '
+        'INSERT INTO settlements (user_id, settle_date, code, code_id, product_name, asset_type, '
         'invest_amount, settle_amount, profit, fees, holding_days) '
-        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-        (record_date, stock_code, code_id, stock_name, asset_type,
+        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+        (user_id, record_date, stock_code, code_id, stock_name, asset_type,
          buy_amount, total_settle, profit, total_fees, holding_days)
     )
     db.commit()
     # 结清后同步统计汇总表（sync 会删除该记录）
-    sync_statistics_summary(cursor, db, code_id)
+    sync_statistics_summary(cursor, db, code_id, user_id=user_id)
     db.commit()
 
     flash(f'已自动结清，收益：¥{profit:,.2f}（含利息 ¥{interest_amount:,.2f}），费用：¥{total_fees:,.2f}，持有 {holding_days if holding_days else "?"} 天', 'info')
 
 
-def _auto_settle_otc(cursor, db, product_code, code_id, product_name, asset_type, settle_date):
-    """场外APP：卖出后剩余份额为0时，自动结清"""
+def _auto_settle_otc(cursor, db, product_code, code_id, product_name, asset_type, settle_date, user_id):
+    """场外APP：卖出后剩余份额为0时，自动结清（仅统计当前用户的数据）"""
     # 买入总份额
     cursor.execute("""
         SELECT COALESCE(SUM(quantity), 0) AS buy_qty
         FROM otc_app
-        WHERE code_id = %s AND product_code = %s AND operation_type = '买入' AND status = '持有'
-    """, (code_id, product_code))
+        WHERE code_id = %s AND product_code = %s AND operation_type = '买入' AND status = '持有' AND user_id = %s
+    """, (code_id, product_code, user_id))
     buy_qty = float(cursor.fetchone()['buy_qty'])
 
     # 卖出总份额
     cursor.execute("""
         SELECT COALESCE(SUM(quantity), 0) AS sell_qty
         FROM otc_app
-        WHERE code_id = %s AND product_code = %s AND operation_type = '卖出' AND status = '持有'
-    """, (code_id, product_code))
+        WHERE code_id = %s AND product_code = %s AND operation_type = '卖出' AND status = '持有' AND user_id = %s
+    """, (code_id, product_code, user_id))
     sell_qty = float(cursor.fetchone()['sell_qty'])
 
     if buy_qty <= 0 or abs(sell_qty - buy_qty) > 0.0001:
@@ -220,15 +223,15 @@ def _auto_settle_otc(cursor, db, product_code, code_id, product_name, asset_type
             COALESCE(SUM(COALESCE(fees, 0)), 0) AS total_fees,
             DATEDIFF(MAX(record_date), MIN(record_date)) AS hold_days
         FROM otc_app
-        WHERE code_id = %s AND product_code = %s AND status = '持有'
-    """, (code_id, product_code))
+        WHERE code_id = %s AND product_code = %s AND status = '持有' AND user_id = %s
+    """, (code_id, product_code, user_id))
     row = cursor.fetchone()
 
-    # 标记所有记录为结清
+    # 标记所有记录为结清（仅当前用户）
     cursor.execute("""
         UPDATE otc_app SET status = '结清'
-        WHERE code_id = %s AND product_code = %s AND status = '持有'
-    """, (code_id, product_code))
+        WHERE code_id = %s AND product_code = %s AND status = '持有' AND user_id = %s
+    """, (code_id, product_code, user_id))
 
     invest_amount = float(row['invest_total'])
     settle_amount = float(row['settle_total'])
@@ -237,15 +240,15 @@ def _auto_settle_otc(cursor, db, product_code, code_id, product_name, asset_type
     profit = settle_amount - invest_amount - total_fees
 
     cursor.execute(
-        'INSERT INTO settlements (settle_date, code, code_id, product_name, asset_type, '
+        'INSERT INTO settlements (user_id, settle_date, code, code_id, product_name, asset_type, '
         'invest_amount, settle_amount, profit, fees, holding_days, quantity) '
-        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
-        (settle_date, product_code, code_id, product_name, asset_type,
+        'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+        (user_id, settle_date, product_code, code_id, product_name, asset_type,
          invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty)
     )
     db.commit()
     # 结清后同步统计汇总表（sync 会删除该记录）
-    sync_statistics_summary(cursor, db, code_id)
+    sync_statistics_summary(cursor, db, code_id, user_id=user_id)
     db.commit()
 
     flash(f'卖出份额与买入份额相等，{product_name}（{product_code}）已自动结清，记录已写入结清查询页', 'success')

@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理 - 投资管家{% endblock %}
+{% block page_title %}用户管理{% endblock %}
+
+{% block top_actions %}
+    <button class="btn btn-primary" onclick="openUserModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        创建用户
+    </button>
+{% endblock %}
+
+{% block content %}
+<div class="table-card">
+    <div class="card-header" style="padding: 16px 20px;">
+        <h3 class="card-title">用户列表</h3>
+        <span style="font-size: 13px; color: #6B7280;">共 {{ users|length }} 个用户</span>
+    </div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>用户ID</th>
+                    <th>用户姓名</th>
+                    <th>用户号码</th>
+                    <th>角色</th>
+                    <th>用户状态</th>
+                    <th>创建时间</th>
+                    <th class="col-actions">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>
+                        {{ user.user_id }}
+                        {% if user.is_admin %}<span class="badge badge-warning">管理员</span>{% endif %}
+                    </td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.phone or '-' }}</td>
+                    <td>{{ user.role_names or '-' }}</td>
+                    <td>
+                        {% if user.status == 1 %}
+                            <span class="status status-holding">启用</span>
+                        {% else %}
+                            <span class="badge badge-warning">禁用</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else '-' }}</td>
+                    <td class="col-actions">
+                        <div class="actions">
+                            <button class="btn btn-sm btn-edit" onclick="openEditUserModal({{ user.id }})">编辑</button>
+                            {% if not user.is_admin %}
+                            <form method="post" action="{{ url_for('users.delete') }}" onsubmit="return confirm('确定删除用户「{{ user.username }}」吗？');" style="display:inline;">
+                                <input type="hidden" name="id" value="{{ user.id }}">
+                                <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" style="text-align:center; padding: 40px; color: #6B7280;">暂无用户，点击右上角「创建用户」添加</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 创建用户弹窗 -->
+<div id="userModal" class="modal">
+    <div class="modal-content" style="max-width: 560px;">
+        <div class="modal-header">
+            <h3>创建用户</h3>
+            <button type="button" class="modal-close" onclick="closeUserModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="post" action="{{ url_for('users.add') }}" onsubmit="return validateNewUser();">
+                <div class="modal-form-grid">
+                    <div class="form-group">
+                        <label>用户ID（登录账号）*</label>
+                        <input class="form-control" type="text" name="user_id" id="new_user_id" required
+                               onblur="checkUserIdExists()" oninput="checkUserIdExists()">
+                        <div id="new_user_id_hint" style="font-size:12px; margin-top:4px;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>用户姓名 *</label>
+                        <input class="form-control" type="text" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label>用户号码</label>
+                        <input class="form-control" type="text" name="phone">
+                    </div>
+                    <div class="form-group">
+                        <label>登录密码 *</label>
+                        <input class="form-control" type="password" name="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label>用户状态</label>
+                        <select class="form-control" name="status">
+                            <option value="1">启用</option>
+                            <option value="0">禁用</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>角色（可多选）</label>
+                        <select class="form-control" name="roles" multiple style="height: 90px;">
+                            {% for role in roles %}
+                            <option value="{{ role.id }}">{{ role.role_name }}{% if role.description %}（{{ role.description }}）{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeUserModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">创建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑用户弹窗 -->
+<div id="editUserModal" class="modal">
+    <div class="modal-content" style="max-width: 560px;">
+        <div class="modal-header">
+            <h3>编辑用户</h3>
+            <button type="button" class="modal-close" onclick="closeEditUserModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="post" action="{{ url_for('users.edit') }}">
+                <input type="hidden" name="id" id="edit_id">
+                <div class="modal-form-grid">
+                    <div class="form-group">
+                        <label>用户ID（登录账号）</label>
+                        <input class="form-control" type="text" id="edit_user_id" readonly style="background:#F3F4F6;">
+                    </div>
+                    <div class="form-group">
+                        <label>用户姓名 *</label>
+                        <input class="form-control" type="text" name="username" id="edit_username" required>
+                    </div>
+                    <div class="form-group">
+                        <label>用户号码</label>
+                        <input class="form-control" type="text" name="phone" id="edit_phone">
+                    </div>
+                    <div class="form-group">
+                        <label>登录密码（留空不修改）</label>
+                        <input class="form-control" type="password" name="password" placeholder="留空保持原密码">
+                    </div>
+                    <div class="form-group">
+                        <label>用户状态</label>
+                        <select class="form-control" name="status" id="edit_status">
+                            <option value="1">启用</option>
+                            <option value="0">禁用</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>角色（可多选）</label>
+                        <select class="form-control" name="roles" id="edit_roles" multiple style="height: 90px;">
+                            {% for role in roles %}
+                            <option value="{{ role.id }}">{{ role.role_name }}{% if role.description %}（{{ role.description }}）{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditUserModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 用户数据：由后端渲染为 JS 对象，供编辑弹窗回填
+    const USERS = {{ users|tojson }};
+    const USER_ROLES = {{ user_roles|default({})|tojson }};
+
+    // 创建用户：user_id 唯一性即时校验（不可与现有用户重复）
+    function checkUserIdExists() {
+        const input = document.getElementById('new_user_id');
+        const hint = document.getElementById('new_user_id_hint');
+        const val = (input.value || '').trim();
+        if (!val) { hint.textContent = ''; hint.style.color = ''; return; }
+        const exists = USERS.some(u => String(u.user_id) === val);
+        if (exists) {
+            hint.textContent = '该用户ID已存在，请更换';
+            hint.style.color = '#DC2626';
+        } else {
+            hint.textContent = '✓ 可以使用';
+            hint.style.color = '#059669';
+        }
+    }
+    function validateNewUser() {
+        const input = document.getElementById('new_user_id');
+        const val = (input.value || '').trim();
+        if (USERS.some(u => String(u.user_id) === val)) {
+            checkUserIdExists();
+            input.focus();
+            return false;
+        }
+        return true;
+    }
+
+    function openUserModal() {
+        document.getElementById('userModal').style.display = 'flex';
+        setTimeout(() => {
+            const input = document.getElementById('new_user_id');
+            input.value = '';
+            document.getElementById('new_user_id_hint').textContent = '';
+            input.focus();
+        }, 50);
+    }
+    function closeUserModal() {
+        document.getElementById('userModal').style.display = 'none';
+    }
+    function openEditUserModal(id) {
+        const u = USERS.find(x => x.id === id);
+        if (!u) return;
+        document.getElementById('edit_id').value = u.id;
+        document.getElementById('edit_user_id').value = u.user_id;
+        document.getElementById('edit_username').value = u.username;
+        document.getElementById('edit_phone').value = u.phone || '';
+        document.getElementById('edit_status').value = String(u.status);
+        // 回填角色
+        const sel = document.getElementById('edit_roles');
+        const roleIds = (USER_ROLES[id] || []).map(r => String(r));
+        Array.from(sel.options).forEach(opt => { opt.selected = roleIds.includes(opt.value); });
+        document.getElementById('editUserModal').style.display = 'flex';
+    }
+    function closeEditUserModal() {
+        document.getElementById('editUserModal').style.display = 'none';
+    }
+    window.onclick = function(event) {
+        if (event.target === document.getElementById('userModal')) closeUserModal();
+        if (event.target === document.getElementById('editUserModal')) closeEditUserModal();
+    };
+</script>
+{% endblock %}
