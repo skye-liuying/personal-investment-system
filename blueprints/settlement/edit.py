@@ -3,7 +3,7 @@
 from flask import flash, redirect, request, url_for
 from . import settlement_bp
 from database import get_db
-from blueprints.auth.helpers import get_current_user_id, is_admin
+from blueprints.auth.helpers import owner_condition
 
 
 @settlement_bp.route('/edit', methods=['POST'])
@@ -44,25 +44,16 @@ def edit():
 
     db = get_db()
     cursor = db.cursor()
-    if is_admin():
-        cursor.execute(
-            'UPDATE settlements SET code=%s, code_id=%s, product_name=%s, asset_type=%s, '
-            'settle_date=%s, invest_amount=%s, settle_amount=%s, profit=%s, fees=%s, '
-            'holding_days=%s, quantity=%s '
-            'WHERE id=%s',
-            (code, code_id or None, product_name, asset_type, settle_date,
-             invest_amount, settle_amount, profit, fees, holding_days, quantity, record_id)
-        )
-    else:
-        cursor.execute(
-            'UPDATE settlements SET code=%s, code_id=%s, product_name=%s, asset_type=%s, '
-            'settle_date=%s, invest_amount=%s, settle_amount=%s, profit=%s, fees=%s, '
-            'holding_days=%s, quantity=%s '
-            'WHERE id=%s AND user_id=%s',
-            (code, code_id or None, product_name, asset_type, settle_date,
-             invest_amount, settle_amount, profit, fees, holding_days, quantity,
-             record_id, get_current_user_id())
-        )
+    # admin 可编辑全部；组长可编辑自己和组员；普通用户只能编辑自己的记录
+    owner_sql, owner_params = owner_condition()
+    cursor.execute(
+        'UPDATE settlements SET code=%s, code_id=%s, product_name=%s, asset_type=%s, '
+        'settle_date=%s, invest_amount=%s, settle_amount=%s, profit=%s, fees=%s, '
+        'holding_days=%s, quantity=%s '
+        'WHERE id=%s' + owner_sql,
+        (code, code_id or None, product_name, asset_type, settle_date,
+         invest_amount, settle_amount, profit, fees, holding_days, quantity, record_id) + owner_params
+    )
     db.commit()
     cursor.close()
     db.close()

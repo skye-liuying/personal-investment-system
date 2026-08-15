@@ -23,6 +23,7 @@ def edit():
     password = request.form.get('password', '')
     status = request.form.get('status', '1')
     role_ids = request.form.getlist('roles')
+    member_ids = request.form.getlist('group_members')
 
     if not uid or not username:
         flash('缺少必要参数', 'error')
@@ -32,7 +33,7 @@ def edit():
     cursor = db.cursor()
 
     # 校验目标用户存在且不是超管自身被禁用
-    cursor.execute('SELECT id, is_admin FROM users WHERE id = %s', (uid,))
+    cursor.execute('SELECT id, is_admin, user_id FROM users WHERE id = %s', (uid,))
     user = cursor.fetchone()
     if not user:
         cursor.close()
@@ -70,6 +71,16 @@ def edit():
         cursor.execute(
             'INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (%s, %s)',
             (uid, rid)
+        )
+
+    # 重新配置组员（组长-组员关系，存登录账号；排除自身避免自环）
+    leader_id = user['user_id']
+    member_ids = [m for m in member_ids if m and m != leader_id]
+    cursor.execute('DELETE FROM user_groups WHERE leader_id = %s', (leader_id,))
+    for member_id in member_ids:
+        cursor.execute(
+            'INSERT IGNORE INTO user_groups (leader_id, member_id) VALUES (%s, %s)',
+            (leader_id, member_id)
         )
 
     db.commit()

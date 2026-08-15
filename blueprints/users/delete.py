@@ -24,7 +24,7 @@ def delete():
     db = get_db()
     cursor = db.cursor()
 
-    cursor.execute('SELECT id, is_admin FROM users WHERE id = %s', (uid,))
+    cursor.execute('SELECT id, is_admin, user_id FROM users WHERE id = %s', (uid,))
     user = cursor.fetchone()
     if not user:
         cursor.close()
@@ -38,6 +38,12 @@ def delete():
         flash('不能删除超级管理员账号', 'error')
         return redirect(url_for('users.query'))
 
+    # 清理该用户作为组长或组员的组关系
+    login_id = user['user_id']
+    cursor.execute(
+        'DELETE FROM user_groups WHERE leader_id = %s OR member_id = %s',
+        (login_id, login_id)
+    )
     cursor.execute('DELETE FROM user_roles WHERE user_id = %s', (uid,))
     cursor.execute('DELETE FROM users WHERE id = %s', (uid,))
 

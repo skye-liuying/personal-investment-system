@@ -62,6 +62,19 @@ def fetch_user_roles():
     return user_roles
 
 
+def fetch_user_groups():
+    """查询组长-组员关系，格式 {leader_user_id: [member_user_id, ...]}"""
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute('SELECT leader_id, member_id FROM user_groups ORDER BY id')
+    user_groups = {}
+    for row in cursor.fetchall():
+        user_groups.setdefault(row['leader_id'], []).append(row['member_id'])
+    cursor.close()
+    db.close()
+    return user_groups
+
+
 @users_bp.route('/')
 def query():
     """用户列表页（需超级管理员权限）"""
@@ -70,4 +83,8 @@ def query():
     users = fetch_users()
     roles = get_all_roles()
     user_roles = fetch_user_roles()
-    return render_template('users.html', users=users, roles=roles, user_roles=user_roles)
+    user_groups = fetch_user_groups()
+    return render_template(
+        'users.html', users=users, roles=roles,
+        user_roles=user_roles, user_groups=user_groups
+    )

@@ -5,7 +5,7 @@ from . import otc_app_bp
 from . import get_overview
 from database import get_db
 from paginate import paginate
-from blueprints.auth.helpers import scope_condition, get_current_user_id
+from blueprints.auth.helpers import scope_condition
 
 
 @otc_app_bp.route('/')
@@ -80,10 +80,10 @@ def query():
     )
     records = cursor.fetchall()
 
-    # 最近一条 APP 名称（供新增弹窗默认值）
+    # 最近一条 APP 名称（供新增弹窗默认值，组长范围为自己+组员）
     if scope_sql:
         cursor.execute(
-            "SELECT app_name FROM otc_app WHERE user_id = %s ORDER BY record_date DESC, id DESC LIMIT 1",
+            "SELECT app_name FROM otc_app WHERE " + scope_sql + " ORDER BY record_date DESC, id DESC LIMIT 1",
             scope_params
         )
     else:

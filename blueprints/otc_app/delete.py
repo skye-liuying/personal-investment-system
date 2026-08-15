@@ -3,7 +3,7 @@
 from flask import flash, redirect, request, url_for
 from . import otc_app_bp
 from database import get_db
-from blueprints.auth.helpers import get_current_user_id, is_admin
+from blueprints.auth.helpers import owner_condition
 from blueprints.statistics.sync import sync_statistics_summary
 
 
@@ -24,29 +24,31 @@ def delete():
     db = get_db()
     cursor = db.cursor()
 
-    # 删除前获取 code_id 用于同步（非 admin 只能删除自己的记录）
-    if is_admin():
-        cursor.execute('SELECT code_id FROM otc_app WHERE id = %s', (record_id,))
-        row = cursor.fetchone()
-        code_id = row['code_id'] if row and row['code_id'] else None
-        cursor.execute('DELETE FROM otc_app WHERE id = %s', (record_id,))
-    else:
-        current_user_id = get_current_user_id()
-        cursor.execute(
-            'SELECT code_id FROM otc_app WHERE id = %s AND user_id = %s',
-            (record_id, current_user_id)
-        )
-        row = cursor.fetchone()
-        code_id = row['code_id'] if row and row['code_id'] else None
-        cursor.execute(
-            'DELETE FROM otc_app WHERE id = %s AND user_id = %s',
-            (record_id, current_user_id)
-        )
+    # admin 可删除全部；组长可删除自己和组员；普通用户只能删除自己的记录。
+    # 同步统计时使用被删记录的归属账号，保证统计正确。
+    owner_sql, owner_params = owner_condition()
+    cursor.execute(
+        'SELECT code_id, user_id FROM otc_app WHERE id = %s' + owner_sql,
+        (record_id,) + owner_params
+    )
+    row = cursor.fetchone()
+    if not row:
+        cursor.close()
+        db.close()
+        flash('记录不存在或无权操作', 'error')
+        return redirect(url_for('otc_app.query'))
+
+    code_id = row['code_id'] if row['code_id'] else None
+    record_owner = row['user_id']
+    cursor.execute(
+        'DELETE FROM otc_app WHERE id = %s' + owner_sql,
+        (record_id,) + owner_params
+    )
     db.commit()
 
     # 同步统计汇总表
     if code_id:
-        sync_statistics_summary(cursor, db, code_id, user_id=get_current_user_id())
+        sync_statistics_summary(cursor, db, code_id, user_id=record_owner)
         db.commit()
 
     cursor.close()

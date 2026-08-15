@@ -6,13 +6,11 @@ from flask import flash, redirect, request, url_for
 from . import statistics_bp
 from database import get_db
 from .sync import sync_statistics_summary
-from blueprints.auth.helpers import get_current_user_id
+from blueprints.auth.helpers import owner_condition
 
 
 @statistics_bp.route('/settle', methods=['POST'])
 def settle():
-    current_user_id = get_current_user_id()
-
     code = request.form.get('code', '').strip()
     code_id = request.form.get('code_id', '').strip()
     source = request.form.get('source', '').strip()
@@ -42,6 +40,35 @@ def settle():
     db = get_db()
     cursor = db.cursor()
 
+    # 数据归属校验：admin 可见全部；组长可见自己和组员；普通用户仅自己。
+    # 从源头表确定该产品的归属用户，保证结清记录/状态更新/统计同步落在正确账号上。
+    if source not in ('securities', 'otc_app'):
+        flash('无法识别产品来源', 'error')
+        cursor.close()
+        db.close()
+        return redirect(url_for('statistics.query'))
+
+    owner_sql, owner_params = owner_condition()
+    code_col = 'stock_code' if source == 'securities' else 'product_code'
+    cursor.execute(
+        'SELECT DISTINCT user_id FROM ' + source
+        + ' WHERE ' + code_col + ' = %s AND IFNULL(code_id, \'\') = IFNULL(%s, \'\')' + owner_sql,
+        (code, code_id_val) + owner_params
+    )
+    owner_rows = cursor.fetchall()
+    if not owner_rows:
+        cursor.close()
+        db.close()
+        flash('未找到该产品的数据，无法结清', 'error')
+        return redirect(url_for('statistics.query'))
+    owner_ids = {r['user_id'] for r in owner_rows}
+    if len(owner_ids) > 1:
+        cursor.close()
+        db.close()
+        flash('该产品数据归属多个用户，无法统一结清，请在各管理页面分别处理', 'error')
+        return redirect(url_for('statistics.query'))
+    current_user_id = owner_ids.pop()
+
     # 根据来源表插入卖出记录
     if source == 'securities':
         cursor.execute(
@@ -59,7 +86,7 @@ def settle():
             (current_user_id, broker, settle_date, '卖出', code, code_id_val, product_name,
              unit_price, quantity, total_amount, fees, asset_type, '持有')
         )
-    elif source == 'otc_app':
+    else:
         cursor.execute(
             'SELECT app_name FROM otc_app WHERE product_code = %s'
             ' AND IFNULL(code_id, \'\') = IFNULL(%s, \'\') AND user_id = %s LIMIT 1',
@@ -75,11 +102,6 @@ def settle():
             (current_user_id, app_name, settle_date, '卖出', code, code_id_val, product_name,
              unit_price, quantity, total_amount, fees, asset_type, '持有')
         )
-    else:
-        flash('无法识别产品来源', 'error')
-        cursor.close()
-        db.close()
-        return redirect(url_for('statistics.query'))
 
     db.commit()
 

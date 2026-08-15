@@ -76,6 +76,10 @@ def query():
         params
     )
     records = cursor.fetchall()
+    # 将 date 对象转为字符串，避免模板 tojson 序列化为 "Sat, 15 Aug 2026 ..." 导致编辑弹窗日期无法回填
+    for r in records:
+        if r['settle_date'] is not None:
+            r['settle_date'] = str(r['settle_date'])
     cursor.close()
     db.close()
 

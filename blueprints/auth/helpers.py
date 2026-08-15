@@ -14,6 +14,7 @@ PAGES = [
     ('statistics', '统计分析'),
     ('users', '用户管理'),
     ('roles', '角色管理'),
+    ('products', '产品管理'),
 ]
 PAGE_NAMES = [p for p, _ in PAGES]
 PAGE_LABELS = dict(PAGES)
@@ -82,9 +83,54 @@ def has_perm(page, action='view'):
     return perms.get(page, {}).get(action, False)
 
 
+def get_group_member_ids(uid=None):
+    """获取 uid（默认当前登录用户）作为组长时的组员登录账号列表"""
+    uid = uid or get_current_user_id()
+    if not uid:
+        return []
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute('SELECT member_id FROM user_groups WHERE leader_id = %s', (uid,))
+    member_ids = [row['member_id'] for row in cursor.fetchall()]
+    cursor.close()
+    db.close()
+    return member_ids
+
+
+def group_scope_ids():
+    """当前用户可见的数据归属账号列表：
+    admin → None（查看全部数据）；组长 → [自己, 组员...]；普通用户 → [自己]"""
+    if is_admin():
+        return None
+    uid = get_current_user_id()
+    member_ids = get_group_member_ids(uid)
+    if member_ids:
+        return [uid] + member_ids
+    return [uid]
+
+
 def scope_condition():
     """数据隔离条件。admin 返回 (None, None) 表示查看全部数据；
+    组长返回 ('user_id IN (自己, 组员...)', params) 可查看自己和组员的数据；
     普通用户返回 ('user_id = %s', (uid,)) 表示只看自己的数据。"""
-    if is_admin():
+    ids = group_scope_ids()
+    if ids is None:
         return None, None
-    return 'user_id = %s', (get_current_user_id(),)
+    if len(ids) == 1:
+        return 'user_id = %s', (ids[0],)
+    placeholders = ', '.join(['%s'] * len(ids))
+    return f'user_id IN ({placeholders})', tuple(ids)
+
+
+def owner_condition():
+    """编辑/删除/矫正等修改操作的归属条件。
+    返回 (sql_tail, params)，sql_tail 以 ' AND ' 开头可直接拼接：
+    admin → ('', ())；组长 → (' AND user_id IN (自己, 组员...)', ...)；
+    普通用户 → (' AND user_id = %s', (uid,))"""
+    ids = group_scope_ids()
+    if ids is None:
+        return '', ()
+    if len(ids) == 1:
+        return ' AND user_id = %s', (ids[0],)
+    placeholders = ', '.join(['%s'] * len(ids))
+    return f' AND user_id IN ({placeholders})', tuple(ids)

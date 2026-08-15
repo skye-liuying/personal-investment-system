@@ -4,7 +4,7 @@
 from flask import request, redirect, url_for, flash, jsonify
 from . import principal_bp
 from database import get_db
-from blueprints.auth.helpers import get_current_user_id, is_admin
+from blueprints.auth.helpers import owner_condition
 
 
 @principal_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
@@ -12,9 +12,8 @@ def edit(id):
     db = get_db()
     cursor = db.cursor()
 
-    # 非 admin 只能编辑自己的记录
-    owner_sql = '' if is_admin() else ' AND user_id = %s'
-    owner_params = () if is_admin() else (get_current_user_id(),)
+    # admin 可编辑全部；组长可编辑自己和组员；普通用户只能编辑自己的记录
+    owner_sql, owner_params = owner_condition()
 
     if request.method == 'POST':
         broker = request.form.get('broker', '').strip()

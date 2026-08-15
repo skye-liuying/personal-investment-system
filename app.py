@@ -18,6 +18,7 @@ from blueprints.settlement import settlement_bp
 from blueprints.auth import auth_bp
 from blueprints.users import users_bp
 from blueprints.roles import roles_bp
+from blueprints.products import products_bp
 
 app.register_blueprint(principal_bp, url_prefix='/principal')
 app.register_blueprint(securities_bp, url_prefix='/securities')
@@ -27,6 +28,7 @@ app.register_blueprint(settlement_bp, url_prefix='/settlement')
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(users_bp, url_prefix='/users')
 app.register_blueprint(roles_bp, url_prefix='/roles')
+app.register_blueprint(products_bp, url_prefix='/products')
 
 
 # ---------------- 数据库初始化：建表 + admin 种子数据 ----------------
@@ -75,6 +77,27 @@ def init_database():
             UNIQUE KEY uk_role_page (role_id, page)
         ) COMMENT='角色权限表'
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_groups (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            leader_id VARCHAR(50) NOT NULL,
+            member_id VARCHAR(50) NOT NULL,
+            UNIQUE KEY uk_leader_member (leader_id, member_id),
+            KEY idx_leader (leader_id),
+            KEY idx_member (member_id)
+        ) COMMENT='组长-组员关系表'
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(50) NOT NULL UNIQUE,
+            name VARCHAR(100) NOT NULL,
+            asset_type VARCHAR(20) DEFAULT NULL,
+            remark VARCHAR(255) DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) COMMENT='产品管理表（全局共享产品字典）'
+    """)
 
     # 兼容旧库：为 5 张业务表补齐 user_id 字段（VARCHAR 存登录账号）与索引
     business_tables = ['principal', 'securities', 'otc_app', 'settlements', 'statistics_summary']
@@ -113,7 +136,7 @@ def init_database():
             db.rollback()
             print(f'[init] {table} 迁移跳过: {exc}')
 
-    pages = ['principal', 'securities', 'otc_app', 'statistics', 'settlement', 'users', 'roles']
+    pages = ['principal', 'securities', 'otc_app', 'statistics', 'settlement', 'users', 'roles', 'products']
 
     # 确保 admin 角色存在（拥有全部页面全部权限）
     cursor.execute("SELECT id FROM roles WHERE role_name = 'admin'")
@@ -141,6 +164,23 @@ def init_database():
                     "VALUES (%s, %s, 1, 1, 1, 1)",
                     (admin_role_id, page)
                 )
+
+    # 确保组长角色存在（数据范围由用户管理页配置的组员决定）
+    cursor.execute("SELECT id FROM roles WHERE role_name = '组长'")
+    leader_role = cursor.fetchone()
+    if not leader_role:
+        cursor.execute(
+            "INSERT INTO roles (role_name, description) "
+            "VALUES ('组长', '组长：可查看/修改自己和组员创建的数据')"
+        )
+        leader_role_id = cursor.lastrowid
+        # 默认给 5 个业务页面查看/新增/修改权限（删除权限由管理员按需开启）
+        for page in ('principal', 'securities', 'otc_app', 'statistics', 'settlement'):
+            cursor.execute(
+                "INSERT INTO role_permissions (role_id, page, can_view, can_add, can_edit, can_delete) "
+                "VALUES (%s, %s, 1, 1, 1, 0)",
+                (leader_role_id, page)
+            )
 
     # 确保 admin 超级用户存在（user_id=admin，密码 admin，is_admin=1）
     cursor.execute("SELECT id FROM users WHERE user_id = 'admin'")
@@ -194,6 +234,7 @@ def check_login_and_permission():
             'correct': 'edit',
             'settle': 'edit',
             'trade': 'add',
+            'import_data': 'add',
         }
         endpoint_action = request.endpoint.split('.')[-1] if request.endpoint else ''
         need = action_map.get(endpoint_action)
@@ -215,7 +256,7 @@ def inject_globals():
     """模板全局注入：active_page、当前用户与权限判断函数"""
     from blueprints.auth.helpers import has_perm
     active_page = request.blueprint if request.blueprint in (
-        'principal', 'securities', 'otc_app', 'statistics', 'settlement', 'users', 'roles'
+        'principal', 'securities', 'otc_app', 'statistics', 'settlement', 'users', 'roles', 'products'
     ) else ''
     return {
         'active_page': active_page,

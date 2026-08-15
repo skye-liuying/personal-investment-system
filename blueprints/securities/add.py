@@ -82,7 +82,8 @@ def add():
 
     flash('证券记录添加成功', 'success')
     from urllib.parse import urlencode
-    params = {'broker': broker, 'stock_name': stock_name, 'stock_code': stock_code}
+    # 新增完成后按提交日期查询当天的全部数据，不限定券商/股票等过滤条件
+    params = {}
     if record_date:
         params['date_from'] = record_date
         params['date_to'] = record_date

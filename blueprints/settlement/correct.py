@@ -9,7 +9,7 @@ from datetime import datetime
 from flask import flash, redirect, request, url_for
 from . import settlement_bp
 from database import get_db
-from blueprints.auth.helpers import get_current_user_id, is_admin
+from blueprints.auth.helpers import owner_condition
 
 
 @settlement_bp.route('/correct', methods=['POST'])
@@ -23,14 +23,12 @@ def correct():
     db = get_db()
     cursor = db.cursor()
 
-    # ——— 查找结清记录（非 admin 只能矫正自己的记录）———
-    if is_admin():
-        cursor.execute('SELECT * FROM settlements WHERE id = %s', (record_id,))
-    else:
-        cursor.execute(
-            'SELECT * FROM settlements WHERE id = %s AND user_id = %s',
-            (record_id, get_current_user_id())
-        )
+    # ——— 查找结清记录（admin 可矫正全部；组长可矫正自己和组员；普通用户只能矫正自己的）———
+    owner_sql, owner_params = owner_condition()
+    cursor.execute(
+        'SELECT * FROM settlements WHERE id = %s' + owner_sql,
+        (record_id,) + owner_params
+    )
     settle = cursor.fetchone()
     if not settle:
         cursor.close()
@@ -48,12 +46,9 @@ def correct():
     buy_qty = 0.0
     first_buy_date = None
 
-    # 数据隔离条件：非 admin 只能基于自己的证券/场外记录矫正
-    user_cond = ''
-    user_args = ()
-    if not is_admin():
-        user_cond = ' AND user_id = %s'
-        user_args = (get_current_user_id(),)
+    # 数据隔离条件：admin 基于全部记录矫正；组长基于自己和组员；普通用户只基于自己的
+    user_cond = owner_sql
+    user_args = owner_params
 
     # ——— 从 securities 汇总 ———
     cursor.execute("""
@@ -175,22 +170,13 @@ def correct():
     synced = updated_sec + updated_otc
 
     # ——— 更新结清记录 ———
-    if is_admin():
-        cursor.execute(
-            'UPDATE settlements SET invest_amount = %s, settle_amount = %s, profit = %s,'
-            ' fees = %s, holding_days = %s, quantity = %s'
-            ' WHERE id = %s',
-            (invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty if buy_qty > 0 else None,
-             record_id)
-        )
-    else:
-        cursor.execute(
-            'UPDATE settlements SET invest_amount = %s, settle_amount = %s, profit = %s,'
-            ' fees = %s, holding_days = %s, quantity = %s'
-            ' WHERE id = %s AND user_id = %s',
-            (invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty if buy_qty > 0 else None,
-             record_id, get_current_user_id())
-        )
+    cursor.execute(
+        'UPDATE settlements SET invest_amount = %s, settle_amount = %s, profit = %s,'
+        ' fees = %s, holding_days = %s, quantity = %s'
+        ' WHERE id = %s' + owner_sql,
+        (invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty if buy_qty > 0 else None,
+         record_id) + owner_params
+    )
     db.commit()
     cursor.close()
     db.close()

@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}产品管理 - 投资管家{% endblock %}
+{% block page_title %}产品管理{% endblock %}
+
+{% block top_actions %}
+    <button class="btn btn-secondary" onclick="openImportModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        导入产品
+    </button>
+    <button class="btn btn-primary" onclick="openAddModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        新增产品
+    </button>
+{% endblock %}
+
+{% block content %}
+<div class="table-card">
+    <div class="card-header" style="padding: 16px 20px; flex-wrap: wrap; gap: 8px;">
+        <form method="get" action="{{ url_for('products.query') }}" style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input class="form-control" type="text" name="code" value="{{ code }}" placeholder="产品代码" style="width:150px;">
+            <input class="form-control" type="text" name="name" value="{{ name }}" placeholder="产品名称" style="width:180px;">
+            <select class="form-control" name="asset_type" style="width:140px;">
+                <option value="">全部资产类型</option>
+                {% for t in ['股票', '债券', '基金', '定存', '港美股'] %}
+                <option value="{{ t }}" {% if asset_type == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary">搜索</button>
+            <a href="{{ url_for('products.query') }}" class="btn btn-secondary">重置</a>
+        </form>
+        <span style="font-size: 13px; color: #6B7280; margin-left:auto;">共 {{ pagination.total }} 个产品</span>
+    </div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>产品代码</th>
+                    <th>产品名称</th>
+                    <th>资产类型</th>
+                    <th>备注</th>
+                    <th>创建时间</th>
+                    <th class="col-actions">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in records %}
+                <tr>
+                    <td>{{ record.id }}</td>
+                    <td>{{ record.code }}</td>
+                    <td>{{ record.name }}</td>
+                    <td>{{ record.asset_type or '-' }}</td>
+                    <td>{{ record.remark or '-' }}</td>
+                    <td>{{ record.created_at.strftime('%Y-%m-%d %H:%M') if record.created_at else '-' }}</td>
+                    <td class="col-actions">
+                        <div class="actions">
+                            <button class="btn btn-sm btn-edit" onclick="openEditModal({{ record.id }})">编辑</button>
+                            <form method="post" action="{{ url_for('products.delete') }}" onsubmit="return confirm('确定删除产品「{{ record.name }}」吗？');" style="display:inline;">
+                                <input type="hidden" name="id" value="{{ record.id }}">
+                                <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align:center; padding: 40px; color: #6B7280;">暂无产品，可点击右上角「新增产品」或「导入产品」</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if pagination.total_pages > 1 %}
+    {% include '_pagination.html' %}
+    {% endif %}
+</div>
+
+<!-- 新增产品弹窗 -->
+<div id="addModal" class="modal">
+    <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+            <h3>新增产品</h3>
+            <button type="button" class="modal-close" onclick="closeAddModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="post" action="{{ url_for('products.add') }}" onsubmit="return validateAddForm();">
+                <div class="modal-form-grid">
+                    <div class="form-group">
+                        <label>产品代码 *</label>
+                        <input class="form-control" type="text" name="code" id="add_code" required
+                               onblur="checkAddCode()" oninput="checkAddCode()">
+                        <div id="add_code_hint" style="font-size:12px; margin-top:4px;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>产品名称 *</label>
+                        <input class="form-control" type="text" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>资产类型</label>
+                        <select class="form-control" name="asset_type">
+                            <option value="">不指定</option>
+                            {% for t in ['股票', '债券', '基金', '定存', '港美股'] %}
+                            <option value="{{ t }}">{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>备注</label>
+                        <input class="form-control" type="text" name="remark" placeholder="选填">
+                    </div>
+                </div>
+                <div class="modal-form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">创建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑产品弹窗 -->
+<div id="editProductModal" class="modal">
+    <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+            <h3>编辑产品</h3>
+            <button type="button" class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="post" id="editForm">
+                <input type="hidden" name="id" id="edit_id">
+                <div class="modal-form-grid">
+                    <div class="form-group">
+                        <label>产品代码 *</label>
+                        <input class="form-control" type="text" name="code" id="edit_code" required>
+                    </div>
+                    <div class="form-group">
+                        <label>产品名称 *</label>
+                        <input class="form-control" type="text" name="name" id="edit_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>资产类型</label>
+                        <select class="form-control" name="asset_type" id="edit_asset_type">
+                            <option value="">不指定</option>
+                            {% for t in ['股票', '债券', '基金', '定存', '港美股'] %}
+                            <option value="{{ t }}">{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>备注</label>
+                        <input class="form-control" type="text" name="remark" id="edit_remark" placeholder="选填">
+                    </div>
+                </div>
+                <div class="modal-form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 导入产品弹窗 -->
+<div id="importModal" class="modal">
+    <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+            <h3>导入产品</h3>
+            <button type="button" class="modal-close" onclick="closeImportModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="post" action="{{ url_for('products.import_data') }}">
+                <div class="form-group">
+                    <label>导入区间 *</label>
+                    <input class="form-control" type="text" name="period" required placeholder="例如：M-2026-06">
+                </div>
+                <div style="font-size:12px; color:#6B7280; margin-top:10px; line-height:1.9;">
+                    支持以下格式：<br>
+                    <b>M-2026-06</b>　按月：导入 2026 年 6 月证券/场外记录中的产品<br>
+                    <b>N-2026</b>　　按年：导入 2026 年全年记录中的产品<br>
+                    <b>D-2026-06-06</b>　按日：导入 2026-06-06 当天记录中的产品<br>
+                    <span style="color:#9CA3AF;">读取系统内全部账号的记录，产品代码已存在则自动跳过。</span>
+                </div>
+                <div class="modal-form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeImportModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">开始导入</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 当前页产品数据：用于新增/编辑弹窗回填与前端唯一性提示
+    const PRODUCTS = {{ records|tojson }};
+
+    function openAddModal() {
+        document.getElementById('addModal').style.display = 'flex';
+        setTimeout(() => {
+            const input = document.getElementById('add_code');
+            input.value = '';
+            document.getElementById('add_code_hint').textContent = '';
+            input.focus();
+        }, 50);
+    }
+    function closeAddModal() {
+        document.getElementById('addModal').style.display = 'none';
+    }
+
+    // 新增：code 前端唯一性提示（当前页；后端仍有唯一校验兜底）
+    function checkAddCode() {
+        const input = document.getElementById('add_code');
+        const hint = document.getElementById('add_code_hint');
+        const val = (input.value || '').trim();
+        if (!val) { hint.textContent = ''; hint.style.color = ''; return; }
+        if (PRODUCTS.some(p => String(p.code) === val)) {
+            hint.textContent = '该产品代码已存在，请更换';
+            hint.style.color = '#DC2626';
+        } else {
+            hint.textContent = '';
+        }
+    }
+    function validateAddForm() {
+        const val = (document.getElementById('add_code').value || '').trim();
+        if (PRODUCTS.some(p => String(p.code) === val)) {
+            checkAddCode();
+            document.getElementById('add_code').focus();
+            return false;
+        }
+        return true;
+    }
+
+    function openEditModal(id) {
+        const p = PRODUCTS.find(x => x.id === id);
+        if (!p) return;
+        document.getElementById('edit_id').value = p.id;
+        document.getElementById('edit_code').value = p.code;
+        document.getElementById('edit_name').value = p.name;
+        document.getElementById('edit_asset_type').value = p.asset_type || '';
+        document.getElementById('edit_remark').value = p.remark || '';
+        document.getElementById('editForm').action = '{{ url_for("products.edit", pid=0) }}'.replace('0', id);
+        document.getElementById('editProductModal').style.display = 'flex';
+    }
+    function closeEditModal() {
+        document.getElementById('editProductModal').style.display = 'none';
+    }
+
+    function openImportModal() {
+        document.getElementById('importModal').style.display = 'flex';
+        setTimeout(() => {
+            const input = document.querySelector('#importModal input[name="period"]');
+            input.value = '';
+            input.focus();
+        }, 50);
+    }
+    function closeImportModal() {
+        document.getElementById('importModal').style.display = 'none';
+    }
+
+    // 点击遮罩关闭对应弹窗
+    window.onclick = function(event) {
+        if (event.target === document.getElementById('addModal')) closeAddModal();
+        if (event.target === document.getElementById('editProductModal')) closeEditModal();
+        if (event.target === document.getElementById('importModal')) closeImportModal();
+    };
+</script>
+{% endblock %}

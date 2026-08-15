@@ -229,6 +229,9 @@
                         <button class="btn btn-success btn-sm" onclick="quickTrade(this, '买入')">买入</button>
                         <button class="btn btn-warning btn-sm" onclick="quickTrade(this, '卖出')">卖出</button>
                         {% endif %}
+                        {% if can('securities', 'edit') %}
+                        <button class="btn btn-primary btn-sm" onclick="openEditModal({{ record.id }})">编辑</button>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
@@ -238,6 +241,81 @@
         </table>
     </div>
     {% with pagination=pagination %}{% include '_pagination.html' %}{% endwith %}
+</div>
+
+<!-- 编辑记录弹窗 -->
+<div id="editModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>编辑证券记录</h3>
+            <button type="button" class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" id="editForm">
+                <input type="hidden" name="id" id="edit_id">
+                <div class="modal-form-grid-3">
+                    <div class="form-group">
+                        <label>券商</label>
+                        <input type="text" name="broker" id="edit_broker" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>日期</label>
+                        <input type="date" name="record_date" id="edit_date" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>操作类型</label>
+                        <select name="operation_type" id="edit_operation_type" class="form-control" required onchange="toggleEditFields(this.value)">
+                            <option value="买入">买入</option>
+                            <option value="卖出">卖出</option>
+                            <option value="利息">利息</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>资产类型</label>
+                        <select name="asset_type" id="edit_asset_type" class="form-control" required>
+                            <option value="股票">股票</option>
+                            <option value="债券">债券</option>
+                            <option value="基金">基金</option>
+                            <option value="定存">定存</option>
+                            <option value="港美股">港美股</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>股票代码</label>
+                        <input type="text" name="stock_code" id="edit_stock_code" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>关联编号</label>
+                        <input type="text" name="code_id" id="edit_code_id" class="form-control" placeholder="如A20260701">
+                    </div>
+                    <div class="form-group">
+                        <label>股票名称</label>
+                        <input type="text" name="stock_name" id="edit_stock_name" class="form-control" required>
+                    </div>
+                    <div class="form-group" id="edit_price_group">
+                        <label>单价</label>
+                        <input type="number" name="unit_price" id="edit_unit_price" class="form-control" step="0.0001" oninput="calcEditAmount()">
+                    </div>
+                    <div class="form-group" id="edit_qty_group">
+                        <label>数量（整数）</label>
+                        <input type="number" name="quantity" id="edit_quantity" class="form-control" step="1" oninput="calcEditAmount()" placeholder="如100">
+                    </div>
+                    <div class="form-group">
+                        <label>总金额</label>
+                        <input type="number" name="total_amount" id="edit_total_amount" class="form-control" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>费用</label>
+                        <input type="number" name="fees" id="edit_fees" class="form-control" step="0.01" value="0">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- 快速交易弹窗 -->
@@ -351,6 +429,8 @@ function calcAddAmount() {
 window.addEventListener('click', function(event) {
     var modal = document.getElementById('addModal');
     if (event.target === modal) closeAddModal();
+    var editModal = document.getElementById('editModal');
+    if (event.target === editModal) closeEditModal();
 });
 
 function doSearch() {
@@ -398,6 +478,54 @@ function calcQtAmount() {
 
 function closeQuickTrade() {
     document.getElementById('quickTradeModal').style.display = 'none';
+}
+
+// ---- 编辑弹窗 ----
+function openEditModal(id) {
+    fetch('{{ url_for("securities.edit", id=0) }}'.replace('0', id))
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.error) { alert(data.error); return; }
+            document.getElementById('edit_id').value = data.id;
+            document.getElementById('edit_broker').value = data.broker;
+            document.getElementById('edit_date').value = data.record_date;
+            document.getElementById('edit_operation_type').value = data.operation_type;
+            document.getElementById('edit_asset_type').value = data.asset_type;
+            document.getElementById('edit_stock_code').value = data.stock_code;
+            document.getElementById('edit_code_id').value = data.code_id;
+            document.getElementById('edit_stock_name').value = data.stock_name;
+            document.getElementById('edit_unit_price').value = data.unit_price;
+            document.getElementById('edit_quantity').value = data.quantity;
+            document.getElementById('edit_total_amount').value = data.total_amount;
+            document.getElementById('edit_fees').value = data.fees;
+            document.getElementById('editForm').action = '{{ url_for("securities.edit", id=0) }}'.replace('0', id);
+            toggleEditFields(data.operation_type);
+            document.getElementById('editModal').style.display = 'flex';
+        });
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+function toggleEditFields(opType) {
+    var priceGroup = document.getElementById('edit_price_group');
+    var qtyGroup = document.getElementById('edit_qty_group');
+    if (opType === '利息') {
+        priceGroup.style.display = 'none';
+        qtyGroup.style.display = 'none';
+    } else {
+        priceGroup.style.display = '';
+        qtyGroup.style.display = '';
+    }
+}
+
+function calcEditAmount() {
+    var price = parseFloat(document.getElementById('edit_unit_price').value) || 0;
+    var qty = parseFloat(document.getElementById('edit_quantity').value) || 0;
+    if (price && qty) {
+        document.getElementById('edit_total_amount').value = (price * qty).toFixed(2);
+    }
 }
 </script>
 {% endblock %}

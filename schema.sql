@@ -182,3 +182,30 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     UNIQUE KEY uk_role_page (role_id, page)
 ) COMMENT='角色权限表';
 
+-- ============================================================
+-- 10. 组长-组员关系表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_groups (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    leader_id VARCHAR(50) NOT NULL COMMENT '组长登录账号',
+    member_id VARCHAR(50) NOT NULL COMMENT '组员登录账号',
+    UNIQUE KEY uk_leader_member (leader_id, member_id),
+    KEY idx_leader (leader_id),
+    KEY idx_member (member_id)
+) COMMENT='组长-组员关系表（组长可查看/修改自己和组员创建的数据）';
+
+-- ============================================================
+-- 11. 产品管理表（全局共享产品字典，仅超级管理员维护）
+--     独立于业务数据，不按用户隔离；code 唯一
+-- ============================================================
+DROP TABLE IF EXISTS products;
+CREATE TABLE products (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    code VARCHAR(50) NOT NULL UNIQUE COMMENT '产品代码（唯一）',
+    name VARCHAR(100) NOT NULL COMMENT '产品名称',
+    asset_type VARCHAR(20) DEFAULT NULL COMMENT '资产类型',
+    remark VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) COMMENT='产品管理表（全局共享产品字典）';
+

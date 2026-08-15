@@ -55,7 +55,7 @@
                     <span>结清查询</span>
                 </a>
                 {% endif %}
-                {% if can('users', 'view') or can('roles', 'view') %}
+                {% if can('users', 'view') or can('roles', 'view') or can('products', 'view') %}
                 <div class="nav-section-title">系统管理</div>
                 {% if can('users', 'view') %}
                 <a href="{{ url_for('users.query') }}" class="nav-item {% if active_page == 'users' %}active{% endif %}">
@@ -67,6 +67,12 @@
                 <a href="{{ url_for('roles.query') }}" class="nav-item {% if active_page == 'roles' %}active{% endif %}">
                     <span class="nav-icon">{% include 'icons/shield.svg' %}</span>
                     <span>角色权限</span>
+                </a>
+                {% endif %}
+                {% if can('products', 'view') %}
+                <a href="{{ url_for('products.query') }}" class="nav-item {% if active_page == 'products' %}active{% endif %}">
+                    <span class="nav-icon">{% include 'icons/package.svg' %}</span>
+                    <span>产品管理</span>
                 </a>
                 {% endif %}
                 {% endif %}

@@ -25,6 +25,7 @@
                     <th>用户姓名</th>
                     <th>用户号码</th>
                     <th>角色</th>
+                    <th>组员</th>
                     <th>用户状态</th>
                     <th>创建时间</th>
                     <th class="col-actions">操作</th>
@@ -41,6 +42,14 @@
                     <td>{{ user.username }}</td>
                     <td>{{ user.phone or '-' }}</td>
                     <td>{{ user.role_names or '-' }}</td>
+                    <td>
+                        {% set members = user_groups.get(user.user_id, []) %}
+                        {% if members %}
+                            {{ members|join('、') }}
+                        {% else %}
+                            <span style="color:#9CA3AF;">-</span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if user.status == 1 %}
                             <span class="status status-holding">启用</span>
@@ -63,7 +72,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" style="text-align:center; padding: 40px; color: #6B7280;">暂无用户，点击右上角「创建用户」添加</td>
+                    <td colspan="9" style="text-align:center; padding: 40px; color: #6B7280;">暂无用户，点击右上角「创建用户」添加</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -166,6 +175,14 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>组员（可多选，该用户作为组长时可查看/修改自己和组员创建的数据）</label>
+                        <select class="form-control" name="group_members" id="edit_group_members" multiple style="height: 90px;">
+                            {% for u in users if not u.is_admin %}
+                            <option value="{{ u.user_id }}">{{ u.user_id }}{% if u.username %}（{{ u.username }}）{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
                 <div class="modal-form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeEditUserModal()">取消</button>
@@ -182,6 +199,7 @@
     // 用户数据：由后端渲染为 JS 对象，供编辑弹窗回填
     const USERS = {{ users|tojson }};
     const USER_ROLES = {{ user_roles|default({})|tojson }};
+    const USER_GROUPS = {{ user_groups|default({})|tojson }};
 
     // 创建用户：user_id 唯一性即时校验（不可与现有用户重复）
     function checkUserIdExists() {
@@ -233,6 +251,13 @@
         const sel = document.getElementById('edit_roles');
         const roleIds = (USER_ROLES[id] || []).map(r => String(r));
         Array.from(sel.options).forEach(opt => { opt.selected = roleIds.includes(opt.value); });
+        // 回填组员（排除自身）
+        const gSel = document.getElementById('edit_group_members');
+        const groupMemberIds = USER_GROUPS[u.user_id] || [];
+        Array.from(gSel.options).forEach(opt => {
+            opt.disabled = (opt.value === u.user_id);
+            opt.selected = groupMemberIds.includes(opt.value);
+        });
         document.getElementById('editUserModal').style.display = 'flex';
     }
     function closeEditUserModal() {

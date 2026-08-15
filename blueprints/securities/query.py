@@ -5,7 +5,7 @@ from . import securities_bp
 from . import get_overview
 from database import get_db
 from paginate import paginate
-from blueprints.auth.helpers import scope_condition, get_current_user_id
+from blueprints.auth.helpers import scope_condition
 
 
 @securities_bp.route('/')
@@ -86,9 +86,12 @@ def query():
     )
     records = cursor.fetchall()
 
-    # 查询最新一笔记录的券商，供新增弹窗默认填充
+    # 查询最新一笔记录的券商，供新增弹窗默认填充（组长范围为自己+组员）
     if scope_sql:
-        cursor.execute('SELECT broker FROM securities WHERE user_id = %s ORDER BY id DESC LIMIT 1', scope_params)
+        cursor.execute(
+            'SELECT broker FROM securities WHERE ' + scope_sql + ' ORDER BY id DESC LIMIT 1',
+            scope_params
+        )
     else:
         cursor.execute('SELECT broker FROM securities ORDER BY id DESC LIMIT 1')
     last_row = cursor.fetchone()

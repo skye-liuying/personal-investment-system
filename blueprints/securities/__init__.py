@@ -61,4 +61,4 @@ def get_overview(db, where_clauses=None, params=None):
     }
 
 
-from . import query, add, delete  # noqa: E402, F401
+from . import query, add, delete, edit  # noqa: E402, F401
