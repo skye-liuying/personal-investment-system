@@ -82,9 +82,11 @@ def add():
 
     flash('证券记录添加成功', 'success')
     from urllib.parse import urlencode
-    # 新增完成后按提交日期查询当天的全部数据，不限定券商/股票等过滤条件
+    # 新增完成后按本次提交的关联编号（code_id）自动查询，便于直接看到该笔及其同组记录
     params = {}
-    if record_date:
+    if code_id:
+        params['code_id'] = code_id
+    elif record_date:
         params['date_from'] = record_date
         params['date_to'] = record_date
     return redirect(url_for('securities.query') + '?' + urlencode(params))

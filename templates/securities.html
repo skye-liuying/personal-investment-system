@@ -138,15 +138,16 @@
                     </div>
                     <div class="form-group">
                         <label>股票代码</label>
-                        <input type="text" name="stock_code" class="form-control" required>
+                        <input type="text" name="stock_code" id="add_stock_code" class="form-control" required>
                     </div>
                     <div class="form-group">
                         <label>关联编号</label>
                         <input type="text" name="code_id" class="form-control" placeholder="如A20260701">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="position:relative">
                         <label>股票名称</label>
-                        <input type="text" name="stock_name" class="form-control" required>
+                        <input type="text" name="stock_name" id="add_stock_name" class="form-control" required autocomplete="off" oninput="showStockSuggestions()" onfocus="showStockSuggestions()">
+                        <div id="stockSuggest" class="suggest-box" style="display:none"></div>
                     </div>
                     <div class="form-group" id="add_price_group">
                         <label>单价</label>
@@ -154,7 +155,7 @@
                     </div>
                     <div class="form-group" id="add_qty_group">
                         <label>数量（整数）</label>
-                        <input type="number" name="quantity" class="form-control" step="1" oninput="calcAddAmount()" placeholder="如100">
+                        <input type="number" name="quantity" class="form-control" step="100" min="0" oninput="calcAddAmount()" placeholder="如100">
                     </div>
                     <div class="form-group">
                         <label>总金额</label>
@@ -167,7 +168,7 @@
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeAddModal()">取消</button>
-                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="submit" class="btn btn-primary" formnovalidate onclick="return validateSecForm(this.form)">保存</button>
                 </div>
             </form>
         </div>
@@ -298,7 +299,7 @@
                     </div>
                     <div class="form-group" id="edit_qty_group">
                         <label>数量（整数）</label>
-                        <input type="number" name="quantity" id="edit_quantity" class="form-control" step="1" oninput="calcEditAmount()" placeholder="如100">
+                        <input type="number" name="quantity" id="edit_quantity" class="form-control" step="100" min="0" oninput="calcEditAmount()" placeholder="如100">
                     </div>
                     <div class="form-group">
                         <label>总金额</label>
@@ -311,7 +312,7 @@
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeEditModal()">取消</button>
-                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="submit" class="btn btn-primary" formnovalidate onclick="return validateSecForm(this.form)">保存</button>
                 </div>
             </form>
         </div>
@@ -359,7 +360,7 @@
                     </div>
                     <div class="form-group">
                         <label>数量（整数）</label>
-                        <input type="number" name="quantity" id="qt_quantity" class="form-control" step="1" oninput="calcQtAmount()" placeholder="如100">
+                        <input type="number" name="quantity" id="qt_quantity" class="form-control" step="100" min="0" oninput="calcQtAmount()" placeholder="如100">
                     </div>
                     <div class="form-group">
                         <label>总金额</label>
@@ -371,7 +372,7 @@
                     </div>
                 </div>
                 <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="submit" class="btn btn-primary" formnovalidate onclick="return validateSecForm(this.form)">保存</button>
                 </div>
             </form>
         </div>
@@ -381,6 +382,21 @@
 
 {% block scripts %}
 <script>
+// 提交前手动校验必填项（formnovalidate 已跳过 step 校验，保证可填任意整数如 1）
+function validateSecForm(form) {
+    var required = form.querySelectorAll('[required]');
+    for (var i = 0; i < required.length; i++) {
+        var el = required[i];
+        if (el.offsetParent === null) continue; // 隐藏字段跳过
+        if (!el.value || !String(el.value).trim()) {
+            alert('请填写：' + (el.previousElementSibling ? el.previousElementSibling.textContent.replace('：', '') : '必填项'));
+            el.focus();
+            return false;
+        }
+    }
+    return true;
+}
+
 // ---- 新增弹窗 ----
 function openAddModal() {
     // 券商默认填充最近一笔记录的券商
@@ -426,11 +442,51 @@ function calcAddAmount() {
     }
 }
 
-window.addEventListener('click', function(event) {
-    var modal = document.getElementById('addModal');
-    if (event.target === modal) closeAddModal();
-    var editModal = document.getElementById('editModal');
-    if (event.target === editModal) closeEditModal();
+// 新增弹窗：输入股票名称时，从 products 产品字典下拉展示匹配项，点击后回填代码
+var stockSuggestTimer = null;
+function showStockSuggestions() {
+    var nameEl = document.getElementById('add_stock_name');
+    var box = document.getElementById('stockSuggest');
+    var codeEl = document.getElementById('add_stock_code');
+    if (!nameEl || !box) return;
+    var name = nameEl.value.trim();
+    if (!name) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    // 防抖，避免每键一次请求
+    if (stockSuggestTimer) clearTimeout(stockSuggestTimer);
+    stockSuggestTimer = setTimeout(function () {
+        fetch('{{ url_for("securities.lookup_name") }}?name=' + encodeURIComponent(name))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var matches = (data && data.matches) || [];
+                if (matches.length === 0) { box.style.display = 'none'; box.innerHTML = ''; return; }
+                box.innerHTML = '';
+                matches.forEach(function (m) {
+                    var item = document.createElement('div');
+                    item.className = 'suggest-item';
+                    item.innerHTML = '<span class="suggest-name">' + m.name + '</span>' +
+                                     '<span class="suggest-code">' + m.code + '</span>';
+                    item.onmousedown = function () {
+                        // 用 mousedown 避免输入框先失焦导致下拉消失
+                        nameEl.value = m.name;
+                        if (codeEl) codeEl.value = m.code;
+                        box.style.display = 'none';
+                        box.innerHTML = '';
+                    };
+                    box.appendChild(item);
+                });
+                box.style.display = 'block';
+            })
+            .catch(function () { box.style.display = 'none'; });
+    }, 200);
+}
+
+// 点击页面其它位置时收起下拉（不影响弹框本身）
+document.addEventListener('click', function (e) {
+    var box = document.getElementById('stockSuggest');
+    if (!box) return;
+    if (e.target.id !== 'add_stock_name' && !box.contains(e.target)) {
+        box.style.display = 'none';
+    }
 });
 
 function doSearch() {
@@ -462,7 +518,7 @@ function quickTrade(btn, opType) {
     document.getElementById('qt_quantity').value = '';
     document.getElementById('qt_total_amount').value = '';
     document.getElementById('qt_fees').value = '0';
-    document.getElementById('qt_date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('qt_date').value = '';
     document.getElementById('quickTradeTitle').textContent = opType + ' - ' + cells[6].textContent.trim();
     document.getElementById('quickTradeModal').style.display = 'flex';
 }

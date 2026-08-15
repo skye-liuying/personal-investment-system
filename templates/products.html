@@ -259,11 +259,5 @@
         document.getElementById('importModal').style.display = 'none';
     }
 
-    // 点击遮罩关闭对应弹窗
-    window.onclick = function(event) {
-        if (event.target === document.getElementById('addModal')) closeAddModal();
-        if (event.target === document.getElementById('editProductModal')) closeEditModal();
-        if (event.target === document.getElementById('importModal')) closeImportModal();
-    };
 </script>
 {% endblock %}

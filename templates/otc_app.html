@@ -402,10 +402,6 @@ function closeQuickTrade() {
     document.getElementById('quickTradeModal').style.display = 'none';
 }
 
-// ── 弹窗点击遮罩关闭 ──────────────────────────
-window.addEventListener('click', function(event) {
-    if (event.target === document.getElementById('addOtcModal')) closeAddOtcModal();
-    if (event.target === document.getElementById('quickTradeModal')) closeQuickTrade();
-});
+// ── 弹窗关闭仅通过按钮触发 ──────────────────────────
 </script>
 {% endblock %}

@@ -222,9 +222,5 @@ function closeAddModal() {
     document.getElementById('addModal').style.display = 'none';
 }
 
-window.addEventListener('click', function(event) {
-    var modal = document.getElementById('addModal');
-    if (event.target === modal) closeAddModal();
-});
 </script>
 {% endblock %}

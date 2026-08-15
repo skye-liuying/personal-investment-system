@@ -143,13 +143,35 @@ def correct():
         )
         return redirect(request.referrer or url_for('settlement.query'))
 
+    # ——— 结清日期：取关联编号(code+code_id)下最后一笔操作记录的 record_date ———
+    # 优先匹配 code_id（关联编号），无关联编号时退化为仅按代码匹配
+    last_op_date = None
+
+    def _max_date(table, code_col):
+        nonlocal last_op_date
+        cursor.execute(
+            "SELECT MAX(record_date) AS d FROM " + table +
+            " WHERE " + code_col + " = %s AND IFNULL(code_id, '') = IFNULL(%s, '')" + user_cond,
+            (code, code_id) + user_args
+        )
+        r = cursor.fetchone()
+        if r and r['d']:
+            d = r['d']
+            if last_op_date is None or d > last_op_date:
+                last_op_date = d
+
+    _max_date('securities', 'stock_code')
+    _max_date('otc_app', 'product_code')
+
     # ——— 套用公式 ———
     settle_amount = sell_total + interest_amount
     profit = settle_amount - invest_amount - total_fees
 
+    # 结清日期：优先使用最后一笔操作日期；否则保留原结清日期
+    settle_date = last_op_date if last_op_date else settle['settle_date']
+
     # 持有天数
     holding_days = None
-    settle_date = settle['settle_date']
     if first_buy_date and settle_date:
         holding_days = (datetime.strptime(str(settle_date), '%Y-%m-%d') -
                         datetime.strptime(str(first_buy_date), '%Y-%m-%d')).days
@@ -172,19 +194,21 @@ def correct():
     # ——— 更新结清记录 ———
     cursor.execute(
         'UPDATE settlements SET invest_amount = %s, settle_amount = %s, profit = %s,'
-        ' fees = %s, holding_days = %s, quantity = %s'
+        ' fees = %s, holding_days = %s, quantity = %s, settle_date = %s'
         ' WHERE id = %s' + owner_sql,
         (invest_amount, settle_amount, profit, total_fees, holding_days, buy_qty if buy_qty > 0 else None,
-         record_id) + owner_params
+         settle_date, record_id) + owner_params
     )
     db.commit()
     cursor.close()
     db.close()
 
     flash(
-        '数据矫正成功！投入：¥{:,.2f} 结清金额：¥{:,.2f} 费用：¥{:,.2f} 收益：¥{:,.2f}（{}利息 ¥{:,.2f}）{}'.format(
+        '数据矫正成功！投入：¥{:,.2f} 结清金额：¥{:,.2f} 费用：¥{:,.2f} 收益：¥{:,.2f}（{}利息 ¥{:,.2f}）'
+        ' 结清日期：{} 持有天数：{}{}'.format(
             invest_amount, settle_amount, total_fees, profit,
             '含' if interest_amount > 0 else '无', interest_amount,
+            settle_date, f'{holding_days}天' if holding_days is not None else '-',
             f'，同步更新 {synced} 条记录状态为结清' if synced > 0 else ''
         ),
         'success'

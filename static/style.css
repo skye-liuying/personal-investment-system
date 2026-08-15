@@ -1036,6 +1036,48 @@ body {
     margin-left: 4px;
 }
 
+/* ========= 名称联动下拉建议 ========= */
+.suggest-box {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    margin-top: 4px;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.suggest-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.suggest-item:hover {
+    background: #eff6ff;
+}
+
+.suggest-name {
+    color: #374151;
+    font-weight: 500;
+}
+
+.suggest-code {
+    color: #6b7280;
+    font-size: 12px;
+    font-family: monospace;
+}
+
 /* ========= 搜索清除链接 ========= */
 .search-clear {
     color: #3b82f6;

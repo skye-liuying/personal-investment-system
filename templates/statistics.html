@@ -313,16 +313,6 @@ function closeSettleModal() {
 }
 
 // ---- 通用 ----
-window.onclick = function(event) {
-    var tradeModal = document.getElementById('tradeModal');
-    var settleModal = document.getElementById('settleModal');
-    if (event.target === tradeModal) {
-        tradeModal.style.display = 'none';
-    }
-    if (event.target === settleModal) {
-        settleModal.style.display = 'none';
-    }
-}
 
 function doSearch() {
     var params = new URLSearchParams();

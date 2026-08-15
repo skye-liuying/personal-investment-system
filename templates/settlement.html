@@ -358,17 +358,9 @@ function calcEditAmount() {
     document.getElementById('edit_settle_hint').textContent = (sp * qty) ? '¥' + (sp * qty).toFixed(2) : '-';
 }
 
-// 点击弹窗外部关闭
-window.onclick = function(event) {
-    var addModal = document.getElementById('addModal');
-    var editModal = document.getElementById('editModal');
-    if (event.target === addModal) addModal.style.display = 'none';
-    if (event.target === editModal) editModal.style.display = 'none';
-};
-
 // 数据矫正
 function correctSettle(id, name) {
-    if (!confirm('确定要对「' + name + '」进行数据矫正吗？\n\n将根据公式重新计算：\n收益 = (卖出总金额 + 利息) - 买入总金额 - (买入手续费 + 卖出手续费 + 利息手续费)')) {
+    if (!confirm('确定要对「' + name + '」进行数据矫正吗？\n\n将重新计算：\n1. 结清日期 = 该关联编号下最后一笔操作日期\n2. 持有天数 = 结清日期 - 首笔买入日期\n3. 收益 = (卖出总金额 + 利息) - 买入总金额 - 总手续费\n（收益率随收益自动刷新）')) {
         return;
     }
     document.getElementById('correct_id').value = id;

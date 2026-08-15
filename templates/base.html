@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}投资管家{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* 金额列/汇总值：鼠标悬停显示「万」缩写提示 */
+        .summary-value, .amount-col { cursor: help; }
+    </style>
 </head>
 <body>
     <div class="layout">
@@ -133,10 +137,6 @@
         function closeModal() {
             document.getElementById('editModal').style.display = 'none';
         }
-        window.onclick = function(event) {
-            const modal = document.getElementById('editModal');
-            if (event.target === modal) closeModal();
-        };
 
         // 侧边栏收起/展开
         (function() {
@@ -155,5 +155,33 @@
         })();
     </script>
     {% block scripts %}{% endblock %}
+
+    <script>
+        // 金额悬停提示：将 >=10000 的金额转换为「万」缩写（如 1085835.65 -> 108万5835.65）
+        function fmtWan(n) {
+            if (n === null || isNaN(n)) return null;
+            var neg = n < 0;
+            n = Math.abs(n);
+            if (n < 10000) return null;
+            var wan = Math.floor(n / 10000);
+            var rem = n - wan * 10000;
+            var remStr = '';
+            if (rem > 0) {
+                remStr = (Math.round(rem * 100) / 100).toFixed(2);
+                if (remStr.slice(-3) === '.00') remStr = remStr.slice(0, -3);
+            }
+            return (neg ? '-' : '') + wan + '万' + remStr;
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            var els = document.querySelectorAll('.summary-value, .amount-col');
+            els.forEach(function (el) {
+                var m = el.textContent.match(/[-+]?\d[\d,]*\.?\d*/);
+                if (!m) return;
+                var n = parseFloat(m[0].replace(/,/g, ''));
+                var tip = fmtWan(n);
+                if (tip) el.setAttribute('title', tip);
+            });
+        });
+    </script>
 </body>
 </html>

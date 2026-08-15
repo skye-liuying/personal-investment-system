@@ -263,9 +263,5 @@
     function closeEditUserModal() {
         document.getElementById('editUserModal').style.display = 'none';
     }
-    window.onclick = function(event) {
-        if (event.target === document.getElementById('userModal')) closeUserModal();
-        if (event.target === document.getElementById('editUserModal')) closeEditUserModal();
-    };
 </script>
 {% endblock %}

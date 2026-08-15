@@ -200,9 +200,5 @@
     function closeEditRoleModal() {
         document.getElementById('editRoleModal').style.display = 'none';
     }
-    window.onclick = function(event) {
-        if (event.target === document.getElementById('roleModal')) closeRoleModal();
-        if (event.target === document.getElementById('editRoleModal')) closeEditRoleModal();
-    };
 </script>
 {% endblock %}

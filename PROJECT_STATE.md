@@ -10,6 +10,57 @@
 
 > 每条记录：改动内容 + 影响面（哪些模块/函数被牵连），格式见下方模板。最新在最上面。
 
+### 2026-08-15 证券数量输入框步进改为100，仍支持手动填1
+- 改动文件：`templates/securities.html`（新增/编辑/买入卖出三处数量 input 由 step=1 改为 step=100，min=0；提交按钮加 formnovalidate 并调用 validateSecForm 保留必填校验）
+- 功能：点数量上下箭头默认 +100；仍可手动输入任意整数（如 1），不再被 step 校验拦截
+- 逻辑要点：原生表单提交会触发 step 校验，故用 formnovalidate 跳过 step，同时新增 validateSecForm() 手动校验 required，保证必填项不丢失
+- 影响面：仅证券页前端交互；后端 quantity 仍按整数处理（int）
+
+### 2026-08-15 证券新增保存后按关联编号自动查询结果
+- 改动文件：`blueprints/securities/add.py`（保存成功后重定向：优先带 `code_id` 参数自动查询该关联编号下全部记录；无关联编号时回退为按提交日期查询当天）
+- 功能：新增证券记录保存后，列表自动过滤为该笔的关联编号（如 SMFS20260501），便于直接看到本次操作及其同组数据
+- 逻辑要点：query 已支持 `code_id` 过滤；重定向参数构造用 `urlencode`
+- 影响面：仅新增成功后的重定向行为；不改变存储/校验
+
+### 2026-08-15 证券买入/卖出弹框不再自动填充当天日期
+- 改动文件：`templates/securities.html`（quickTrade 函数去掉 `qt_date` = 当天；改为空值；新增弹框 add_date 本就为空）
+- 功能：点开买入/卖出（快速交易）或新增弹框时，交易日期留空，需用户手动选择，避免误报为当天
+- 逻辑要点：日期 input 仍带 `required`，提交前必须选择，杜绝空日期入库
+- 影响面：仅证券页前端交互；不影响后端存储与校验
+
+### 2026-08-15 证券新增名称联动改为下拉建议（避免误填首个匹配）
+- 改动文件：`blueprints/securities/lookup_name.py`（改为返回所有匹配项 up to 10，按 精确>左匹配>包含 排序）、`templates/securities.html`（去掉单向 autoFillStockCode 自动覆盖，新增 `showStockSuggestions()` 下拉建议 + 点击其它处收起）、`static/style.css`（新增 `.suggest-box/.suggest-item` 样式）
+- 功能：输入股票名称时弹出匹配产品列表（名称+代码），点击某一项才回填代码与名称；不再自动覆盖用户输入，不再只取首个匹配
+- 逻辑要点：200ms 防抖；用 mousedown 回填避免输入框失焦导致下拉消失；点击弹框外（非输入框/下拉内）收起下拉，但不关闭弹框本身
+- 影响面：仅证券新增弹窗交互；products 全局字典查询不变
+- 坑：旧代码曾把匹配名称回写覆盖用户输入，导致「中输入中被强制成中欧」无法改中金；新方案下拉由用户主动点选，输入文本始终保留
+
+### 2026-08-15 弹框交互优化：禁止点击遮罩关闭，仅按钮关闭
+- 改动文件：`templates/` 下 9 个含弹框的页面（base/修改密码、users、roles、products、securities、settlement、principal、otc_app、statistics）
+- 功能：移除所有 `window.onclick / window.addEventListener('click')` 的「点击弹窗外部关闭」逻辑；弹框现在只能通过右上角 × 或弹框内「取消/关闭」功能按钮关闭，避免误点外部丢失已输入数据
+- 影响面：纯前端交互；各弹框的 close 函数（closeAddModal/closeEditModal 等）与按钮 onclick 保持不变，仅去掉遮罩监听
+- 坑：statistics 的 tradeModal/settleModal 原用 `style.display='none'` 直关，已一并移除监听；base.html 修改密码弹框同样处理
+
+### 2026-08-15 金额显示优化：悬停展示「万」缩写
+- 改动文件：`templates/base.html`（head 加 `.summary-value/.amount-col{cursor:help}`，body 注入 `fmtWan()` + DOMContentLoaded 扫描脚本）
+- 功能：本金/证券/场外APP/结清四个页的所有汇总值与金额列，当数值 >=10000 时，鼠标悬停通过原生 title 显示「XXX万YYY.YY」缩写（如 1085835.65 -> 108万5835.65）；<10000 不显示
+- 逻辑要点：`fmtWan` 取 floor(值/10000) 为万、余数为后段（去尾 .00），负数保留符号；脚本解析元素文本中的数字（支持千分位逗号），仅给 `.summary-value` 与 `.amount-col` 设 title
+- 影响面：纯前端展示增强，无后端逻辑/数据变化；跨页面通用（statistics 的金额列也会被覆盖，无害）
+- 坑：收益率百分比列（如结清收益率%）未加 `amount-col`，不会被误标；脚本运行时设置 title，服务端 HTML 不含 title，靠前端执行
+
+### 2026-08-15 结清数据矫正优化：结清日期取自关联编号最后一笔操作日期
+- 改动文件：`blueprints/settlement/correct.py`（结清日期改为取 securities+otc_app 中该 code+code_id 的 MAX(record_date) 即最后一笔操作日期；按此重算 holding_days；UPDATE 写入 settle_date；成功提示补结清日期/持有天数）、`templates/settlement.html`（数据矫正确认弹窗文案说明结清日期自动取自最后一笔操作）
+- 逻辑要点：优先按 code_id（关联编号）匹配；无关联编号时退化为仅按代码匹配。结清日期=最后一笔操作 record_date，否则保留原值；持有天数=结清日期−首笔买入日；收益率（模板派生=利润/本金）随利润重算自动刷新
+- 影响面：仅数据矫正（correct）的结清日期/持有天数计算；不改变权限隔离与统计同步逻辑
+- 坑：收益率非存储列，表内展示随 profit/invest_amount 派生，无需单独更新字段
+
+### 2026-08-15 证券管理新增弹窗「名称→代码」联动
+- 改动文件：新增 `blueprints/securities/lookup_name.py`；修改 `blueprints/securities/__init__.py`（注册模块）、`templates/securities.html`（新增弹窗股票名称输入框加 `oninput="autoFillStockCode()"`，新增 `autoFillStockCode()` JS 调 `/securities/lookup_name`）
+- 功能：新增证券时输入股票名称，自动从 `products` 全局产品字典按名称（精确/左匹配/包含）联动回填股票代码；命中时顺带回填规范名称
+- 逻辑要点：products 全局共享（无 user_id），lookup 直接查全表，不做数据隔离；模糊匹配优先精确命中、其次 id 倒序取最近一条
+- 影响面：仅证券新增弹窗前端体验；新增一个只读查询接口（无写操作，不影响统计与权限）
+- 坑：名称需产品字典中已存在才会带出代码；未命中时不清空已手填的代码（仅当名称为空才清空），避免误删用户手动输入
+
 ### 2026-08-15 新增组长/组员数据隔离（user_groups）
 - 改动文件：新增 `schema.sql`（user_groups 表）；修改 `blueprints/auth/helpers.py`（PAGES 无新增；新增 `get_group_member_ids`/`group_scope_ids`/`scope_condition` 支持组长范围/`owner_condition`）；`blueprints/users/query.py`+`edit.py`+`templates/users.html`（用户编辑弹窗支持配置组员，列表展示组员）；`blueprints/otc_app/delete.py`、`blueprints/securities/delete.py`、`blueprints/principal/delete.py`、`blueprints/principal/edit.py`、`blueprints/settlement/correct.py`、`blueprints/statistics/settle.py`（删除/编辑/结清改用 `owner_condition` 并按 `record_owner` 同步统计）
 - 功能：组长可查看/修改自己和组员（user_groups 表，存登录账号，排除自身防自环）创建的数据；普通用户仅自己；admin 全部。查询用 `scope_condition()`（IN 多账号），修改用 `owner_condition()`（AND user_id IN）
