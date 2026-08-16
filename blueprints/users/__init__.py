@@ -4,4 +4,4 @@ from flask import Blueprint
 
 users_bp = Blueprint('users', __name__)
 
-from . import query, add, edit, delete  # noqa: E402, F401
+from . import query, add, edit, delete, remove_member  # noqa: E402, F401

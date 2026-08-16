@@ -104,7 +104,9 @@
                     <th>资产类型</th>
                     <th>持有金额</th>
                     <th>状态</th>
+                    {% if can('statistics', 'add') or can('statistics', 'edit') %}
                     <th>操作</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -116,6 +118,7 @@
                     <td>{{ row.asset_type }}</td>
                     <td class="amount-col">¥{{ "%.2f"|format(row.amount) }}</td>
                     <td><span class="badge {% if row.status == '持有' %}badge-success{% else %}badge-secondary{% endif %}">{{ row.status }}</span></td>
+                    {% if can('statistics', 'add') or can('statistics', 'edit') %}
                     <td class="actions">
                         {% if row.status == '持有' %}
                         {% if can('statistics', 'add') %}
@@ -129,9 +132,10 @@
                         <span style="color: #9CA3AF; font-size: 12px;">已结清</span>
                         {% endif %}
                     </td>
+                    {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="7" class="empty-state">暂无汇总数据</td></tr>
+                <tr><td colspan="{% if can('statistics', 'add') or can('statistics', 'edit') %}7{% else %}6{% endif %}" class="empty-state">暂无汇总数据</td></tr>
                 {% endfor %}
             </tbody>
         </table>

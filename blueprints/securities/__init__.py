@@ -5,16 +5,17 @@ from flask import Blueprint
 securities_bp = Blueprint('securities', __name__)
 
 
-def get_overview(db, where_clauses=None, params=None):
-    """获取证券管理概览统计数据，支持传入查询条件（数据隔离）"""
+def get_overview(db, scope_sql=None, scope_params=None):
+    """获取证券管理概览统计数据（仅受数据隔离约束，对齐目标页记录数）
+
+    - holding_count：= 统计分析页（status='持有'）显示的记录数（statistics_summary 按关联编号分组后的行数）
+    - settled_count：= 结清查询页显示的记录数（settlements 表总行数）
+    - holding_total / interest_profit：全局持有总投入 / 已获利息（securities 明细口径）
+    """
     cursor = db.cursor()
 
-    # 附加条件（如 user_id = %s），用于数据隔离；admin 不传则为空
-    extra_where = ''
-    extra_args = ()
-    if where_clauses:
-        extra_where = ' AND ' + ' AND '.join(where_clauses)
-        extra_args = tuple(params) if params else ()
+    extra_where = (' AND ' + scope_sql) if scope_sql else ''
+    extra_args = tuple(scope_params) if scope_params else ()
 
     cursor.execute(
         "SELECT COALESCE(SUM(total_amount), 0) AS total "
@@ -34,19 +35,20 @@ def get_overview(db, where_clauses=None, params=None):
     row = cursor.fetchone()
     interest_profit = float(row['total']) if row else 0
 
+    # 持有中数量 = 统计分析页（status='持有'）记录数：statistics_summary 按关联编号分组后的行数
     cursor.execute(
-        "SELECT COUNT(DISTINCT stock_code) AS cnt "
-        "FROM securities "
+        "SELECT COUNT(*) AS cnt "
+        "FROM statistics_summary "
         "WHERE status = '持有'" + extra_where,
         extra_args
     )
     row = cursor.fetchone()
     holding_count = row['cnt'] if row else 0
 
+    # 已结清数量 = 结清查询页记录数：settlements 表总行数
     cursor.execute(
-        "SELECT COUNT(DISTINCT code_id) AS cnt "
-        "FROM securities "
-        "WHERE status = '结清' AND code_id IS NOT NULL" + extra_where,
+        "SELECT COUNT(*) AS cnt "
+        "FROM settlements" + (' WHERE ' + scope_sql if scope_sql else ''),
         extra_args
     )
     row = cursor.fetchone()

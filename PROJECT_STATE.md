@@ -10,6 +10,95 @@
 
 > 每条记录：改动内容 + 影响面（哪些模块/函数被牵连），格式见下方模板。最新在最上面。
 
+### 2026-08-16 结清页新增记录：数量用原生输入框，上下箭头 ±100，任意整数可提交（并防缓存）
+- 改动文件：`templates/settlement.html`（新增弹框「数量」：`input type=number step="any" min="0" inputmode="numeric" pattern="[0-9]*"`，彻底关闭浏览器 step 倍数校验，避免 1143 被提示"最接近有效值为 1100/1200"；`oninput` 仍调用 `normalizeQtyInput(el)` 强制整数；`onkeydown` 调用 `handleQtyArrow(event)` 接管方向键，按上/下箭头每次 ±100，同时重算买入/卖出总额；去掉上一版的自定义 ±100 按钮及 `relaxQtyStep` 临时校验）、`static/style.css`（删除上一版新增的 `.stepper*` 样式）、`templates/base.html`（新增 `Cache-Control: no-cache, no-store, must-revalidate` / `Pragma: no-cache` / `Expires: 0` meta 标签，防止浏览器缓存旧版 HTML，避免代码已改但界面仍报旧校验错误）
+- 背景：`step=100` 会让浏览器强制值必须是 100 的倍数；`step="any"` 虽允许任意值，但原生箭头会 ±1，所以由 JS 接管方向键实现 ±100。用户反馈修改后仍出现旧提示，判断为浏览器缓存了旧版 settlement.html，因此在 base 模板加防缓存 meta
+- 功能：新增结清记录时数量只能填整数（可输入任意整数如 1143）；按键盘上/下箭头（或 number 输入框右侧原生箭头）每次增减 100（最小 0）；页面不再被浏览器缓存旧版 HTML
+- 影响面：结清页新增弹框数量输入；全站页面缓存策略改为不缓存 HTML（CSS/JS 仍按浏览器默认策略缓存）
+- 兼容性：后端 add 逻辑不变
+
+### 2026-08-16 证券页新增记录：资产类型默认显示「请选择」
+- 改动文件：`templates/securities.html`（新增弹框「资产类型」`<select>` 新增 `<option value="" selected>请选择</option>` 作为默认项，保留 `required` 强制选择；`openAddModal()` 重置逻辑由 `value='股票'` 改为 `value=''`，使每次打开新增弹框默认落到「请选择」）
+- 功能：新增证券记录时，资产类型下拉默认显示「请选择」，用户必须主动选择股票/债券/基金/定存/港美股之一才能提交
+- 影响面：证券管理页新增弹框资产类型；编辑弹框未动（编辑时按记录值回填）
+- 兼容性：后端 add 逻辑不变（`required` 校验空值会拦截提交）
+
+### 2026-08-16 结清页新增记录：增加收益字段（自动计算）
+- 改动文件：`templates/settlement.html`（新增弹框「费用」input 加 `id="add_fees"` 并加 `oninput="calcAddAmount()"`；在买入总额/卖出总额下方新增「收益：<span id="add_profit_hint">」提示；`calcAddAmount()` 增加读取费用并计算 `收益 = 卖出金额 - 买入金额 - 费用`（`settle - invest - fees`），显示在 `#add_profit_hint`，盈利绿色（var(--success)）、亏损红色（var(--danger)），无任何金额输入时显示「-」）
+- 公式：`收益 = (卖出单价×数量) - (买入单价×数量) - 费用`，与后端 `add.py` 存储的 `profit = (sp-bp)*qty - fees` 完全一致
+- 功能：新增结清记录时，随买入单价/卖出单价/数量/费用输入实时显示收益（非录入字段，自动算）
+- 影响面：结清页新增弹框；仅新增弹框（编辑弹框未动，仍无收益实时提示）；后端 add 逻辑不变（本就计算并存储 profit）
+- 兼容性：CSS 复用已有 `--success`/`--danger` 变量
+
+### 2026-08-16 修复：结清页数量仍报旧校验（浏览器缓存导致，改服务端禁缓存）
+- 改动文件：`app.py`（新增 `@app.after_request def disable_cache(response)`：对所有响应统一加 `Cache-Control: no-cache, no-store, must-revalidate` / `Pragma: no-cache` / `Expires: 0`，比 base.html 的 meta 标签更可靠，确保浏览器不再缓存 HTML）、`templates/base.html`（移除上一版临时加的缓存 meta 标签，避免重复）
+- 背景：用户强刷后仍提示 1100/1200 旧校验，确认 settlement.html 第 187 行已是 `step="any"`，问题为浏览器缓存旧版 HTML；meta 标签在部分浏览器/Flask 调试模式下不生效，故改为服务端响应头禁缓存
+- 功能：服务端层面禁止缓存，模板/JS 改动即时生效，无需手动强刷
+- 影响面：全站所有响应（HTML/JSON/静态资源）；开发期生效（生产如需缓存可移除该函数）
+- 兼容性：不影响业务逻辑
+
+### 2026-08-16 结清页新增记录增加产品名称→产品代码联动
+- 改动文件：`blueprints/settlement/lookup_name.py`（新增 `lookup_name` 路由 `GET /settlement/lookup_name`，复用 securities 同名接口逻辑；查 `products` 全局字典表（无 user_id 隔离）按名称精确/左匹配/包含模糊匹配，返回最多 10 条 `{code, name}`，按精确优先+id 倒序）、`blueprints/settlement/__init__.py`（注册 import `lookup_name`）、`templates/settlement.html`（新增弹框「产品名称」input 加 `id=add_product_name` 与 `oninput/onfocus=showSettleNameSuggestions('add')`，旁加 `id=addNameSuggest` 下拉框；「产品代码」input 加 `id=add_code`；新增 JS `showSettleNameSuggestions(prefix)` 拉取 `/settlement/lookup_name` 渲染 `.suggest-item`，点选回填名称与代码；`closeAddModal` 关闭时清空下拉框）
+- 功能：新增结清记录时，输入产品名称自动下拉匹配 products 字典，点选后自动回填对应产品代码，与证券管理页新增弹框联动行为一致
+- 影响面：结清页「新增记录」弹框交互；CSS 复用 style.css 已有 `.suggest-box`/`.suggest-item`/`.suggest-name`/`.suggest-code`（证券页同款，无需新增）；已自测（空查询返回 []、模糊查询返回匹配项、无语法错误）
+- 兼容性：仅新增弹框支持联动（编辑弹框未改动，保持原样）；products 为共享字典表，所有用户看到相同候选
+
+### 2026-08-16 用户管理修复：增加独立的「移除组员」入口
+- 改动文件：`blueprints/users/remove_member.py`（新增 `remove_member` 路由 `POST /users/remove_member`，仅 admin 可调用；接收 `leader_id`/`member_id`，`DELETE FROM user_groups WHERE leader_id=%s AND member_id=%s`；禁止 leader==member）、`blueprints/users/__init__.py`（注册 import）、`templates/users.html`（「组员」列每个组员渲染为 `.member-chip`，后接独立的移除按钮 `<form>` 提交到 `users.remove_member`，带确认弹窗；仅解除关系不删账号）、`static/style.css`（新增 `.member-chip`/`.member-x` 样式）
+- 背景：原"移除组员"只能靠编辑组长、在 multiple-select 里手动取消勾选（UX 陷阱，易表现为"删除不了组员"）；且用户管理页仅 admin 可访问
+- 功能：管理员在用户列表「组员」列直接点每个组员的 × 即可从该组长处移除该组员关系；不影响用户账号本身
+- 影响面：用户管理页交互；已自测（admin 移除成功、移除自身被拒、非 admin 被拒、页面渲染移除按钮）
+- 兼容性：原有"编辑组长取消勾选"与"删除用户清关系"逻辑保持不变
+
+### 2026-08-16 修复 get_overview 的 settlements 统计 SQL 语法错误
+- 改动文件：`blueprints/securities/__init__.py`（`get_overview` 中 `settled_count` 查询原为 `FROM settlements" + extra_where`，extra_where 以 ` AND ` 开头，当非 admin（带 scope）时生成 `FROM settlements AND user_id='baba'` 缺 `WHERE` 导致 1064 语法错误；改为 `FROM settlements" + (' WHERE ' + scope_sql if scope_sql else '')`）
+- 触发条件：统计页/证券页概览由非 admin 用户（存在数据隔离 scope）访问时必现；admin 因 scope 为空不触发
+- 影响面：证券页概览「已结清」卡片统计；已自测（非 admin 用户 userA 访问证券页不再 500，admin 仍正常）
+
+### 2026-08-16 证券管理页概览数量对齐目标页记录数
+- 改动文件：`blueprints/securities/__init__.py`（重构 `get_overview`：签名改为 `(db, scope_sql, scope_params)`；`holding_count` 改为 `SELECT COUNT(*) FROM statistics_summary WHERE status='持有' [AND scope]`，即统计分析页 status=持有 的记录数；`settled_count` 改为 `SELECT COUNT(*) FROM settlements [AND scope]`，即结清查询页记录数；`holding_total`/`interest_profit` 维持 securities 明细全局口径）、`blueprints/securities/query.py`（移除 overview_clauses 构造，概览调用改传 `scope_sql, scope_params`）
+- 功能：证券页概览「持有中」数量 = 统计分析页（status=持有）显示的记录数；「已结清」数量 = 结清查询页显示的记录数（均仅受数据隔离约束，与目标页默认记录数完全一致）
+- 逻辑要点：statistics_summary 以 code_id 唯一键（一行=一个关联编号产品），settlements 一行=一笔结清；两表均带 user_id 支持 scope 隔离。概览不再跟随 securities 表搜索条件（点击卡片跳转的目标页也是全局/默认），语义一致
+- 影响面：证券页概览数量统计；已自测（证券页持有中35=统计页35=库35；已结清30=结清页30=库30）
+
+### 2026-08-16 证券管理页概览卡片点击跳转（按关联编号分类查询）
+- 改动文件：`templates/securities.html`（概览卡片「持有中」「已结清」由 `<div>` 改为 `<a>` 链接）
+- 功能：
+  - 点击「持有中」→ 跳转统计分析页 `url_for('statistics.query', status='持有')`，按关联编号分类展示持有的产品
+  - 点击「已结清」→ 跳转结清查询页 `url_for('settlement.query')`，展示已结清的产品（按关联编号呈现）
+- 逻辑要点：统计分析页 `query` 已支持 `status`/`code_id` 过滤（statistics_summary 含 code_id 列）；结清查询页 `query` 已支持 `code_id` 过滤且默认即已结清记录。卡片带 `cursor:pointer` 与悬停提示文案
+- 影响面：仅证券页概览卡片交互；已自测（持有中链接=/statistics/?status=持有；已结清链接=/settlement/）
+
+### 2026-08-16 统计分析页修复：无操作权限时不显示操作列
+- 改动文件：`templates/statistics.html`（产品汇总表：表头「操作」列与每行的操作单元格都改为仅在 `can('statistics','add') or can('statistics','edit')` 时渲染；空数据行的 colspan 由权限动态取 6/7）
+- 功能：当用户对统计分析页既无「新增」也无「修改」权限时，整列（含表头）隐藏，避免出现空白操作单元格；任一权限存在则正常显示对应按钮
+- 逻辑要点：权限判断沿用 `has_perm`（admin 恒为真；普通用户按角色并集），与 before_request 的 POST 操作级拦截一致
+- 影响面：仅统计页产品汇总表展示；已自测（无 add/edit 权限用户访问：表头无「操作」列、表格 6 列、无买入/卖出/结清按钮）
+
+### 2026-08-16 证券管理页概览统计默认显示全量结清、搜索时按条件显示
+- 改动文件：`blueprints/securities/query.py`（条件构建拆分为「列表查询条件 where_clauses」与「概览统计条件 overview_clauses」两组：公共搜索条件共用；默认 status 为空时列表排除结清但概览不加状态过滤；仅当显式搜索 status=结清/持有 时概览才按状态过滤；`get_overview` 改传 `overview_clauses/overview_params`）
+- 功能：默认打开页面（未搜索）时，「已结清」统计框显示全部已结清记录数（此前受列表默认排除结清影响显示 0）；点击搜索（带状态等条件）后按搜索结果展示
+- 逻辑要点：概览统计与列表查询解耦；默认无状态过滤时各统计卡按其内置 status 条件独立统计（已结清=全量结清）；搜索 status=持有 时已结清框为 0（符合"搜索结果"语义）
+- 影响面：证券查询页概览统计；已自测（默认页已结清 65 条=全量结清；搜索结清+code 过滤显示 1 条；搜索持有显示 0 条；列表仍默认排除结清）
+
+### 2026-08-16 证券管理页默认按买入时间倒序、去掉分组查询
+- 改动文件：`blueprints/securities/query.py`（排序统一改为 `record_date DESC, id DESC`，删除原先「持有按 stock_code 分组、结清按 code_id 分组」的 ORDER BY）、`templates/securities.html`（删除记录表格中 group-separator 分组分隔行；概览卡片「X 组」改为「X 条」）、`blueprints/securities/__init__.py`（get_overview 中 holding_count/settled_count 由 `COUNT(DISTINCT stock_code/code_id)` 改为 `COUNT(*)`，与「条数」语义一致）、`static/style.css`（删除不再使用的 .group-separator/.group-tag/.group-code 样式）
+- 功能：证券列表（持有/结清）统一按操作日期倒序展示，不再按股票代码或关联编号分组；顶部统计卡片显示记录条数
+- 逻辑要点：排序仅影响展示顺序，不影响过滤/统计口径；概览统计仍跟随查询过滤条件（默认页只统计持有，结清页统计结清）
+- 影响面：证券查询展示与概览统计；已自测（AAA 两条记录日期 08-15 在 08-10 前；默认页持有 40 条、结清页 65 条与 COUNT(*) 一致）
+
+### 2026-08-15 修复金额悬停万缩写提示（改为立即执行 + MutationObserver）
+- 改动文件：`templates/base.html`（金额提示脚本：去掉 DOMContentLoaded 依赖，改为脚本末尾直接执行 applyWanTooltips()，并用 MutationObserver 监听 body 子节点变化，动态重绘表格后持续生效；已处理元素加 data-wan 去重）
+- 功能：金额 >=10000 时鼠标悬停仍展示「万」缩写（如 108万5835.65）；修复此前依赖 DOMContentLoaded 在部分场景不触发、及 fetch 重绘表格后 title 被清空导致不显示的问题
+- 逻辑要点：fmtWan 算法不变（已验证 1085835.65->108万5835.65、负数、<10000 不提示）；脚本置于 body 末尾 DOM 已就绪，直接执行更可靠
+- 影响面：纯前端展示；跨页面通用
+
+### 2026-08-15 证券新增/买入/卖出弹框关联编号必填
+- 改动文件：`templates/securities.html`（新增弹窗关联编号 input 加 required；买入/卖出快速交易弹框 code_id 为 readonly 且由行数据预填，本就非空）、`blueprints/securities/add.py`（必填字段校验列表加入 code_id，空则 flash 错误并跳回查询）
+- 功能：提交证券记录时关联编号不能为空；前端 validateSecForm 拦截必填，后端 add 路由二次校验
+- 逻辑要点：买入/卖出走同一 add 路由且 code_id 预填，天然满足；新增弹窗需手动填写
+- 影响面：仅证券新增/快速交易的提交校验；不改变存储结构
+
 ### 2026-08-15 证券数量输入框步进改为100，仍支持手动填1
 - 改动文件：`templates/securities.html`（新增/编辑/买入卖出三处数量 input 由 step=1 改为 step=100，min=0；提交按钮加 formnovalidate 并调用 validateSecForm 保留必填校验）
 - 功能：点数量上下箭头默认 +100；仍可手动输入任意整数（如 1），不再被 step 校验拦截

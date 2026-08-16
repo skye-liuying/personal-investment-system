@@ -90,14 +90,14 @@
         <div class="summary-label">已获利息</div>
         <div class="summary-value">¥{{ "%.2f"|format(interest_profit) }}</div>
     </div>
-    <div class="summary-card" style="--card-color: #8B5CF6;">
+    <a class="summary-card" style="--card-color: #8B5CF6; text-decoration: none; color: inherit; cursor: pointer;" title="点击查看持有的产品（按关联编号分类）" href="{{ url_for('statistics.query', status='持有') }}">
         <div class="summary-label">持有中</div>
-        <div class="summary-value">{{ holding_count }} 组</div>
-    </div>
-    <div class="summary-card" style="--card-color: #6B7280;">
+        <div class="summary-value">{{ holding_count }} 条</div>
+    </a>
+    <a class="summary-card" style="--card-color: #6B7280; text-decoration: none; color: inherit; cursor: pointer;" title="点击查看已结清的产品（按关联编号分类）" href="{{ url_for('settlement.query') }}">
         <div class="summary-label">已结清</div>
-        <div class="summary-value">{{ settled_count }} 组</div>
-    </div>
+        <div class="summary-value">{{ settled_count }} 条</div>
+    </a>
 </div>
 
 <!-- 新增记录弹窗 -->
@@ -129,6 +129,7 @@
                     <div class="form-group">
                         <label>资产类型</label>
                         <select name="asset_type" class="form-control" required>
+                            <option value="" selected>请选择</option>
                             <option value="股票">股票</option>
                             <option value="债券">债券</option>
                             <option value="基金">基金</option>
@@ -142,7 +143,7 @@
                     </div>
                     <div class="form-group">
                         <label>关联编号</label>
-                        <input type="text" name="code_id" class="form-control" placeholder="如A20260701">
+                        <input type="text" name="code_id" class="form-control" required placeholder="如A20260701">
                     </div>
                     <div class="form-group" style="position:relative">
                         <label>股票名称</label>
@@ -198,20 +199,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% set ns = namespace(last_group='') %}
-                {% set group_field = 'stock_code' if request.args.get('status', '持有') == '持有' else 'code_id' if request.args.get('status', '') == '结清' else None %}
                 {% for record in records %}
-                {% if group_field %}
-                    {% set current_group = record[group_field] or '-' %}
-                    {% if current_group != ns.last_group %}
-                    <tr class="group-separator"><td colspan="13">
-                        <span class="group-tag">{{ group_field == 'stock_code' and '📌' or '📋' }}</span>
-                        {{ record.stock_name if group_field == 'stock_code' else (record.code_id or '未分类') }}
-                        {% if group_field == 'stock_code' %}<span class="group-code">{{ record.stock_code }}</span>{% endif %}
-                    </td></tr>
-                    {% set ns.last_group = current_group %}
-                    {% endif %}
-                {% endif %}
                 <tr>
                     <td>{{ record.broker }}</td>
                     <td>{{ record.record_date }}</td>
@@ -404,7 +392,7 @@ function openAddModal() {
     // 清空其他字段
     document.getElementById('add_date').value = '';
     document.getElementById('add_operation_type').value = '买入';
-    document.querySelector('#addModal select[name="asset_type"]').value = '股票';
+    document.querySelector('#addModal select[name="asset_type"]').value = '';
     document.querySelector('#addModal input[name="stock_code"]').value = '';
     document.querySelector('#addModal input[name="code_id"]').value = '';
     document.querySelector('#addModal input[name="stock_name"]').value = '';

@@ -148,15 +148,16 @@
                 <div class="modal-form-grid">
                     <div class="form-group">
                         <label>产品代码 *</label>
-                        <input type="text" name="code" class="form-control" required placeholder="如 000001">
+                        <input type="text" name="code" id="add_code" class="form-control" required placeholder="如 000001">
                     </div>
                     <div class="form-group">
                         <label>关联编号</label>
                         <input type="text" name="code_id" class="form-control" placeholder="如 A20260701">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="position:relative">
                         <label>产品名称 *</label>
-                        <input type="text" name="product_name" class="form-control" required placeholder="产品名称">
+                        <input type="text" name="product_name" id="add_product_name" class="form-control" required autocomplete="off" placeholder="产品名称" oninput="showSettleNameSuggestions('add')" onfocus="showSettleNameSuggestions('add')">
+                        <div id="addNameSuggest" class="suggest-box" style="display:none"></div>
                     </div>
                     <div class="form-group">
                         <label>资产类型 *</label>
@@ -183,11 +184,11 @@
                     </div>
                     <div class="form-group">
                         <label>数量 *</label>
-                        <input type="number" name="quantity" id="add_quantity" class="form-control" step="0.0001" required placeholder="数量" oninput="calcAddAmount()">
+                        <input type="number" name="quantity" id="add_quantity" class="form-control" step="any" min="0" required placeholder="数量" inputmode="numeric" pattern="[0-9]*" oninput="normalizeQtyInput(this); calcAddAmount()" onkeydown="handleQtyArrow(event)">
                     </div>
                     <div class="form-group">
                         <label>费用</label>
-                        <input type="number" name="fees" class="form-control" step="0.01" placeholder="买入卖出总费用" value="0">
+                        <input type="number" name="fees" id="add_fees" class="form-control" step="0.01" placeholder="买入卖出总费用" value="0" oninput="calcAddAmount()">
                     </div>
                     <div class="form-group">
                         <label>持有天数</label>
@@ -196,6 +197,7 @@
                     <div class="form-group">
                         <label class="amount-hint">买入总额：<span id="add_invest_hint">-</span></label>
                         <label class="amount-hint">卖出总额：<span id="add_settle_hint">-</span></label>
+                        <label class="amount-hint">收益：<span id="add_profit_hint">-</span></label>
                     </div>
                 </div>
                 <div class="modal-form-actions">
@@ -314,15 +316,78 @@ function openAddModal() {
 function closeAddModal() {
     document.getElementById('addModal').style.display = 'none';
     document.getElementById('addForm').reset();
+    document.getElementById('addNameSuggest').style.display = 'none';
+    document.getElementById('addNameSuggest').innerHTML = '';
 }
 
-// 新增弹窗 — 单价×数量联动计算
+function showSettleNameSuggestions(prefix) {
+    var input = document.getElementById(prefix + '_product_name');
+    var box = document.getElementById(prefix + 'NameSuggest');
+    var val = input.value.trim();
+    if (!val) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    fetch('/settlement/lookup_name?name=' + encodeURIComponent(val))
+        .then(r => r.json())
+        .then(data => {
+            var matches = data.matches || [];
+            if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+            box.innerHTML = '';
+            matches.forEach(function (m) {
+                var div = document.createElement('div');
+                div.className = 'suggest-item';
+                div.innerHTML = '<span class="suggest-name">' + m.name + '</span><span class="suggest-code">' + m.code + '</span>';
+                div.onmousedown = function () {
+                    document.getElementById(prefix + '_product_name').value = m.name;
+                    document.getElementById(prefix + '_code').value = m.code;
+                    box.style.display = 'none';
+                    box.innerHTML = '';
+                };
+                box.appendChild(div);
+            });
+            box.style.display = 'block';
+        })
+        .catch(function () { box.style.display = 'none'; });
+}
+
+// 新增弹窗 — 单价×数量联动计算（含收益）
 function calcAddAmount() {
     var bp = parseFloat(document.getElementById('add_buy_price').value) || 0;
     var sp = parseFloat(document.getElementById('add_sell_price').value) || 0;
     var qty = parseFloat(document.getElementById('add_quantity').value) || 0;
-    document.getElementById('add_invest_hint').textContent = (bp * qty) ? '¥' + (bp * qty).toFixed(2) : '-';
-    document.getElementById('add_settle_hint').textContent = (sp * qty) ? '¥' + (sp * qty).toFixed(2) : '-';
+    var fees = parseFloat(document.getElementById('add_fees').value) || 0;
+    var invest = bp * qty;
+    var settle = sp * qty;
+    document.getElementById('add_invest_hint').textContent = invest ? '¥' + invest.toFixed(2) : '-';
+    document.getElementById('add_settle_hint').textContent = settle ? '¥' + settle.toFixed(2) : '-';
+    // 收益 = 卖出金额 - 买入金额 - 费用
+    var profit = settle - invest - fees;
+    var pf = document.getElementById('add_profit_hint');
+    if (settle || invest || fees) {
+        pf.textContent = '¥' + profit.toFixed(2);
+        pf.style.color = profit >= 0 ? 'var(--success, #1a7f37)' : 'var(--danger, #d1242f)';
+    } else {
+        pf.textContent = '-';
+        pf.style.color = '';
+    }
+}
+
+// 数量输入：只允许整数（剔除小数点/非数字，出现小数则截断）
+function normalizeQtyInput(el) {
+    var s = String(el.value).replace(/[^\d.]/g, '');
+    var i = s.indexOf('.');
+    if (i !== -1) s = s.slice(0, i);
+    el.value = s;
+}
+
+// 数量输入框：step="any" 已避免浏览器 step 倍数校验，
+// 由 JS 接管上下方向键，每次 ±100
+function handleQtyArrow(e) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    var q = e.target;
+    e.preventDefault();
+    var v = parseInt(q.value, 10) || 0;
+    var delta = e.key === 'ArrowUp' ? 100 : -100;
+    q.value = Math.max(0, v + delta);
+    calcAddAmount();
 }
 
 // === 编辑弹窗 ===

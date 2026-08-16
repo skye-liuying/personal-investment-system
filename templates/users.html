@@ -45,7 +45,16 @@
                     <td>
                         {% set members = user_groups.get(user.user_id, []) %}
                         {% if members %}
-                            {{ members|join('、') }}
+                            {% for m in members %}
+                            <span class="member-chip">{{ m }}
+                                <form method="post" action="{{ url_for('users.remove_member') }}" style="display:inline;"
+                                      onsubmit="return confirm('确定从「{{ user.user_id }}」的组员中移除「{{ m }}」吗（仅解除组员关系，不删除账号）？');">
+                                    <input type="hidden" name="leader_id" value="{{ user.user_id }}">
+                                    <input type="hidden" name="member_id" value="{{ m }}">
+                                    <button type="submit" class="member-x" title="移除该组员">&times;</button>
+                                </form>
+                            </span>
+                            {% endfor %}
                         {% else %}
                             <span style="color:#9CA3AF;">-</span>
                         {% endif %}

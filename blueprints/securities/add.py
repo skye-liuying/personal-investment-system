@@ -20,8 +20,8 @@ def add():
     total_amount = request.form.get('total_amount', '').strip()
     fees = request.form.get('fees', '').strip()
 
-    if not all([broker, record_date, operation_type, asset_type, stock_code, stock_name, total_amount]):
-        flash('请填写所有必填字段', 'error')
+    if not all([broker, record_date, operation_type, asset_type, stock_code, code_id, stock_name, total_amount]):
+        flash('请填写所有必填字段（含关联编号）', 'error')
         return redirect(url_for('securities.query'))
 
     try:

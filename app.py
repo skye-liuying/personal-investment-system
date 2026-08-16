@@ -204,6 +204,16 @@ def init_database():
     db.close()
 
 
+# ---------------- 关闭浏览器缓存（开发期避免模板改动后仍显示旧版） ----------------
+@app.after_request
+def disable_cache(response):
+    """对所有响应禁止浏览器缓存，避免 HTML/JS 改动后因缓存看不到效果"""
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
 # ---------------- 登录检查与权限控制 ----------------
 @app.before_request
 def check_login_and_permission():
